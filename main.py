@@ -102,4 +102,20 @@ def create_story_cover(
     w3 = font_line3.getlength(line3_text)
     draw.text(((W - w3) // 2, badge_y + 290), line3_text, font=font_line3, fill=line3_color)
 
-    canvas.convert("RGB").save(output
+    canvas.convert("RGB").save(output_path, quality=95)
+    print(f"Saved: {output_path}")
+
+if __name__ == "__main__":
+    # Test Run with high-res card art
+    sample_img = "https://images.pokemontcg.io/swsh7/215_hires.png"
+    create_story_cover(
+        bg_image_url=sample_img,
+        badge_text="STORY ALERT",
+        line1_text="THIS SECRET PULL",
+        line1_color=NEON_CYAN,
+        line2_text="JUST BROKE",
+        line2_color=WHITE,
+        line3_text="ALL-TIME HIGHS",
+        line3_color=NEON_GREEN,
+        output_path="test_cover.png"
+    )
