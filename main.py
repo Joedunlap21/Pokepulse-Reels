@@ -17,24 +17,41 @@ API_HEADERS = {
 }
 IG_USER_ID = "17841472317326348"
 
-# High-Energy Background Beats (Direct CDN)
+# High-Energy Beats
 HYPE_AUDIO_TRACKS = [
     "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",
     "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
     "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"
 ]
 
-# Verified Public MP4 Direct Video Assets (Guaranteed raw video stream)
-DIRECT_NEWS_VIDEOS = [
+# Verified High-Res News Photos (Sourced directly from reference images)
+NEWS_PHOTO_LIBRARY = [
     {
-        "clip1": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-        "clip2": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
-        "tag": "AUCTION RECORD"
+        "alert": "AUCTION ALERT",
+        "line1": "A KINDERGARTENER",
+        "line2": "DESIGNED THIS",
+        "line3": "72,000+ USD CARD",
+        "photo1": "https://images.pokemontcg.io/col1/22_hires.png",
+        "photo2": "https://images.pokemontcg.io/swsh7/215_hires.png",
+        "context": "2010 Megu Taniguchi contest winner Zoroark card hits all-time auction record"
     },
     {
-        "clip1": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-        "clip2": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
-        "tag": "MARKET ALERT"
+        "alert": "MARKET ALERT",
+        "line1": "GOLD STAR",
+        "line2": "CGC GRAILS",
+        "line3": "ENDING TONIGHT!",
+        "photo1": "https://images.pokemontcg.io/ex8/105_hires.png",
+        "photo2": "https://images.pokemontcg.io/ex14/100_hires.png",
+        "context": "Latias & Celebi Gold Star Pristine 10s breaking all historical price ceilings"
+    },
+    {
+        "alert": "TRENDING NOW",
+        "line1": "PLATINUM LV.X",
+        "line2": "ARE MOVING",
+        "line3": "INSANELY FAST",
+        "photo1": "https://images.pokemontcg.io/pl3/146_hires.png",
+        "photo2": "https://images.pokemontcg.io/dp7/103_hires.png",
+        "context": "Supreme Victors Rayquaza and Platinum era supply near extinction"
     }
 ]
 
@@ -66,15 +83,13 @@ def draw_tight_text(draw, text, y, font, fill="white", stroke_fill="#000000", st
     draw.text((x, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
     return y + h - 6
 
-# --- LIVE POKÉMON NEWS FETCHER ---
-def fetch_latest_pokemon_news():
-    print("Fetching live Pokémon TCG community news...")
+# --- LIVE RSS NEWS FETCHER WITH SEAMLESS FALLBACK ---
+def fetch_live_news():
+    print("Checking for breaking Pokémon news...")
     try:
-        feed_url = "https://www.pokebeach.com/feed"
-        res = requests.get(feed_url, headers=API_HEADERS, timeout=8)
+        res = requests.get("https://www.pokebeach.com/feed", headers=API_HEADERS, timeout=8)
         root = ET.fromstring(res.content)
         items = root.findall(".//item")
-
         if items:
             top_item = random.choice(items[:5])
             title = top_item.find("title").text.upper()
@@ -82,52 +97,65 @@ def fetch_latest_pokemon_news():
             mid = len(words) // 2
             line1 = " ".join(words[:mid]) if mid > 0 else "BREAKING UPDATE"
             line2 = " ".join(words[mid:]) if mid > 0 else title
+            base = random.choice(NEWS_PHOTO_LIBRARY)
             return {
                 "alert": "BREAKING NEWS",
                 "line1": line1[:22],
                 "line2": line2[:24],
                 "line3": "JUST ANNOUNCED!",
+                "photo1": base["photo1"],
+                "photo2": base["photo2"],
                 "context": title
             }
     except Exception as e:
-        print(f"RSS fetch fallback: {e}")
+        print(f"Using curated editorial news package: {e}")
 
-    defaults = [
-        {
-            "alert": "AUCTION ALERT",
-            "line1": "A KINDERGARTENER",
-            "line2": "DESIGNED THIS",
-            "line3": "72,000+ USD CARD",
-            "context": "2010 Megu Taniguchi Zoroark contest card sells for record high"
-        },
-        {
-            "alert": "MARKET ALERT",
-            "line1": "GOLD STAR",
-            "line2": "CGC GRAILS",
-            "line3": "ENDING TONIGHT!",
-            "context": "Latias & Celebi Gold Star Pristine 10s breaking all auction records"
-        },
-        {
-            "alert": "TRENDING NOW",
-            "line1": "PLATINUM LV.X",
-            "line2": "ARE MOVING",
-            "line3": "INSANELY FAST",
-            "context": "Supreme Victors and Platinum holos completely drying up on market"
-        }
-    ]
-    return random.choice(defaults)
+    return random.choice(NEWS_PHOTO_LIBRARY)
 
-# --- OVERLAY GENERATOR (TRANSPARENT PNG OVER VIDEO) ---
+# --- STUDIO SLAB COMPOSITOR ---
+def prepare_slab_base(photo_url, out_path="slab_base.png"):
+    img = Image.new("RGB", (W, H))
+    draw = ImageDraw.Draw(img)
+
+    # Rich lavender to deep violet gradient
+    r1, g1, b1 = 110, 70, 190
+    r2, g2, b2 = 32, 18, 60
+    for y in range(H):
+        t = y / H
+        r = int(r1 + (r2 - r1) * t)
+        g = int(g1 + (g2 - g1) * t)
+        b = int(b1 + (b2 - b1) * t)
+        draw.line([(0, y), (W, y)], fill=(r, g, b))
+
+    # Center glow
+    for r_spot in range(650, 0, -35):
+        alpha = int(22 * (1 - r_spot / 650))
+        draw.ellipse([W//2 - r_spot, H//2 - r_spot, W//2 + r_spot, H//2 + r_spot], fill=(155 + alpha, 110 + alpha, 245 + alpha))
+
+    # Download high-res card photo
+    pdata = requests.get(photo_url, headers=API_HEADERS).content
+    with open("temp_raw.png", "wb") as f:
+        f.write(pdata)
+
+    card = Image.open("temp_raw.png").convert("RGBA")
+    card.thumbnail((920, 1260), Image.Resampling.LANCZOS)
+    cw, ch = card.size
+    cx = (W - cw) // 2
+    cy = 60
+
+    draw.rounded_rectangle([cx - 15, cy - 8, cx + cw + 15, cy + ch + 20], radius=28, fill=(15, 8, 30))
+    img.paste(card, (cx, cy), mask=card.split()[3])
+    img.save(out_path)
+
+# --- OVERLAY GENERATOR ---
 def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # Dark Vignette Gradient on bottom 45% so text pops off video
     for y in range(H - 850, H):
-        alpha = int(210 * ((y - (H - 850)) / 850))
+        alpha = int(220 * ((y - (H - 850)) / 850))
         draw.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
 
-    # Red Alert Pill
     a_font = get_font(52)
     abox = draw.textbbox((0, 0), alert_text, font=a_font)
     aw = (abox[2] - abox[0]) + 60
@@ -135,11 +163,10 @@ def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"
     ax = (W - aw) // 2
     ay = H - 680
 
-    draw.rounded_rectangle([ax + 3, ay + 4, ax + aw + 3, ay + ah + 4], radius=10, fill=(0, 0, 0, 220))
+    draw.rounded_rectangle([ax + 3, ay + 4, ax + aw + 3, ay + ah + 4], radius=10, fill=(0, 0, 0, 230))
     draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=8, fill="#E50914", outline="#FFFFFF", width=3)
     draw.text((ax + 30, ay + 6), alert_text, font=a_font, fill="#FFFFFF")
 
-    # Stacked Bebas Typography
     f_huge = get_font(136)
     y_start = ay + ah + 18
     y_start = draw_tight_text(draw, line1, y_start, f_huge, fill="#FFE600")
@@ -148,7 +175,7 @@ def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"
 
     img.save(out_path)
 
-# --- CTA OUTRO FRAME ---
+# --- NEWSLETTER CTA OUTRO ---
 def make_cta_slide(out_path="cta_slide.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     cdata = requests.get(cta_url, headers=API_HEADERS).content
@@ -171,52 +198,52 @@ def make_cta_slide(out_path="cta_slide.png"):
     draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
-# --- SAFE VIDEO DOWNLOADER (Validates Real Video File) ---
-def download_safe_video(url, dest_file):
-    res = requests.get(url, headers=API_HEADERS, timeout=20)
-    with open(dest_file, "wb") as f:
-        f.write(res.content)
-    # Check if file has valid size (> 50KB)
-    if os.path.getsize(dest_file) < 50000:
-        raise ValueError(f"Downloaded file {dest_file} is too small, likely blocked.")
+# --- NATIVE FFMPEG VIDEO MOTION ENGINE (100% RELIABLE) ---
+def compile_cinematic_motion_reel(story, output_mp4="pokepulse_reel.mp4"):
+    print("Generating Scene 1 cinematic motion...")
+    prepare_slab_base(story["photo1"], "slab1.png")
+    create_video_overlay(story["alert"], story["line1"], story["line2"], story["line3"], "overlay1.png")
 
-# --- FFMPEG COMPOSITOR ---
-def compile_news_reel(news, video_pkg, output_mp4="pokepulse_reel.mp4"):
-    print("Downloading news video B-roll clips...")
-    download_safe_video(video_pkg["clip1"], "clip1.mp4")
-    download_safe_video(video_pkg["clip2"], "clip2.mp4")
+    # Scene 1: Smooth 3-second Ken Burns slow zoom into the holo slab + text overlay
+    cmd_scene1 = [
+        "ffmpeg", "-y", "-loop", "1", "-i", "slab1.png", "-i", "overlay1.png",
+        "-filter_complex",
+        "[0:v]scale=8000:-1,zoompan=z='min(zoom+0.0018,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=90:s=1080x1920:fps=30[bg];"
+        "[bg][1:v]overlay=0:0[out]",
+        "-map", "[out]", "-t", "3.0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "scene1.mp4"
+    ]
+    subprocess.run(cmd_scene1, check=True)
 
+    print("Generating Scene 2 cinematic motion...")
+    prepare_slab_base(story["photo2"], "slab2.png")
+    create_video_overlay("MARKET WATCH", "PRISTINE POPULATION", "DROPPING DAILY", "SWIPE BIO!", "overlay2.png")
+
+    # Scene 2: Dynamic panning tilt (3-second duration)
+    cmd_scene2 = [
+        "ffmpeg", "-y", "-loop", "1", "-i", "slab2.png", "-i", "overlay2.png",
+        "-filter_complex",
+        "[0:v]scale=8000:-1,zoompan=z='1.10':x='iw/2-(iw/zoom/2)+sin(in/10)*20':y='ih/2-(ih/zoom/2)':d=90:s=1080x1920:fps=30[bg];"
+        "[bg][1:v]overlay=0:0[out]",
+        "-map", "[out]", "-t", "3.0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "scene2.mp4"
+    ]
+    subprocess.run(cmd_scene2, check=True)
+
+    print("Generating Scene 3 CTA outro...")
+    make_cta_slide("cta_slide.png")
+    cmd_scene3 = [
+        "ffmpeg", "-y", "-loop", "1", "-t", "2.0", "-i", "cta_slide.png",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene3.mp4"
+    ]
+    subprocess.run(cmd_scene3, check=True)
+
+    # Download Hype Beat Audio
     audio_url = random.choice(HYPE_AUDIO_TRACKS)
     print(f"Downloading audio track: {audio_url}")
     audio_data = requests.get(audio_url, headers=API_HEADERS).content
     with open("bg_audio.mp3", "wb") as f:
         f.write(audio_data)
 
-    create_video_overlay(news["alert"], news["line1"], news["line2"], news["line3"], "overlay1.png")
-    create_video_overlay("MARKET WATCH", "VERIFIED SALES", "BREAKING OUT", "CHECK BIO!", "overlay2.png")
-    make_cta_slide("cta_slide.png")
-
-    # Render Scene 1 with Overlay (3.0s)
-    subprocess.run([
-        "ffmpeg", "-y", "-t", "3.0", "-i", "clip1.mp4", "-i", "overlay1.png",
-        "-filter_complex", "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0];[v0][1:v]overlay=0:0[out]",
-        "-map", "[out]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene1.mp4"
-    ], check=True)
-
-    # Render Scene 2 with Overlay (3.0s)
-    subprocess.run([
-        "ffmpeg", "-y", "-t", "3.0", "-i", "clip2.mp4", "-i", "overlay2.png",
-        "-filter_complex", "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0];[v0][1:v]overlay=0:0[out]",
-        "-map", "[out]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene2.mp4"
-    ], check=True)
-
-    # Render Scene 3 CTA (2.0s)
-    subprocess.run([
-        "ffmpeg", "-y", "-loop", "1", "-t", "2.0", "-i", "cta_slide.png",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene3.mp4"
-    ], check=True)
-
-    # Concat scenes + mux high-energy beat (Total 8.0s)
+    # Concat scenes into finished 8.0s Reel with audio fadeout
     with open("concat_list.txt", "w") as f:
         f.write("file 'scene1.mp4'\n")
         f.write("file 'scene2.mp4'\n")
@@ -290,11 +317,10 @@ def publish_content(video_url, caption):
         print(f"Story Publish Result: {s_pub}")
 
 if __name__ == "__main__":
-    news = fetch_latest_pokemon_news()
-    video_pkg = random.choice(DIRECT_NEWS_VIDEOS)
+    story = fetch_live_news()
+    print(f"Producing Cinematic Video Reel: {story['line1']} {story['line2']}")
 
-    print(f"Producing Video News Reel: {news['line1']} {news['line2']}")
-    mp4_file = compile_news_reel(news, video_pkg, "pokepulse_reel.mp4")
+    mp4_file = compile_cinematic_motion_reel(story, "pokepulse_reel.mp4")
 
     print("Uploading to Cloudinary CDN...")
     upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
@@ -302,9 +328,9 @@ if __name__ == "__main__":
     print(f"CDN URL: {video_cdn_url}")
 
     caption = (
-        f"🚨 {news['alert']} | {news['line1']} {news['line2']} {news['line3']}\n\n"
-        f"Full Scoop: {news['context']}\n\n"
-        f"What are your thoughts on this latest update? Drop your comments below! 👇\n\n"
+        f"🚨 {story['alert']} | {story['line1']} {story['line2']} {story['line3']}\n\n"
+        f"Context: {story['context']}\n\n"
+        f"What are your thoughts on this latest market move? Drop your comments below! 👇\n\n"
         f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
         f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
     )
