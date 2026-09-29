@@ -201,12 +201,17 @@ def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
     ]
     subprocess.run(cmd, check=True)
     return output_mp4
+# --- INSTAGRAM REELS & STORY PUBLISHING ---
+def publish_to_reels_and_story(video_url, caption):
+    # .strip() guarantees no accidental hidden spaces or newlines break the request
+    ig_user_id = os.getenv("IG_USER_ID", "").strip()
+    access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
 
-# --- INSTAGRAM REELS PUBLISHING ---
-def publish_to_reels(video_url, caption):
-    ig_user_id = os.getenv("IG_USER_ID")
-    access_token = os.getenv("IG_ACCESS_TOKEN")
+    if not ig_user_id or not access_token:
+        print("Missing IG_USER_ID or IG_ACCESS_TOKEN.")
+        return
 
+    # 1. PUBLISH TO REELS
     print("Step 1: Initializing Reels container with audio...")
     res = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media", data={
         "media_type": "REELS",
@@ -215,67 +220,56 @@ def publish_to_reels(video_url, caption):
         "access_token": access_token
     }).json()
 
-    if "id" not in res:
+    if "id" in res:
+        container_id = res["id"]
+        print(f"Reel Container ID: {container_id}. Waiting for processing...")
+        for _ in range(15):
+            time.sleep(10)
+            status = requests.get(f"https://graph.facebook.com/v21.0/{container_id}?fields=status_code&access_token={access_token}").json()
+            print(f"Processing status: {status.get('status_code')}")
+            if status.get("status_code") == "FINISHED":
+                break
+            elif status.get("status_code") == "ERROR":
+                print("Video encoding failed on Instagram's end.")
+                break
+
+        pub = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media_publish", data={
+            "creation_id": container_id,
+            "access_token": access_token
+        }).json()
+        if "id" in pub:
+            print(f"Success! Reel is LIVE on @card.stax: {pub['id']}")
+        else:
+            print("Publishing Reel error:", pub)
+    else:
         print("Error initializing Reel:", res)
-        return
 
-    container_id = res["id"]
-    print(f"Reel Container ID: {container_id}. Waiting for Instagram video processing...")
-
-    for _ in range(15):
-        time.sleep(10)
-        status = requests.get(f"https://graph.facebook.com/v21.0/{container_id}?fields=status_code&access_token={access_token}").json()
-        print(f"Processing status: {status.get('status_code')}")
-        if status.get("status_code") == "FINISHED":
-            break
-        elif status.get("status_code") == "ERROR":
-            print("Video encoding failed on Instagram's end.")
-            return
-
-    print("Step 2: Publishing Reel...")
-    pub = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media_publish", data={
-        "creation_id": container_id,
+    # 2. ALSO PUBLISH TO STORY (so you can save it to Highlights!)
+    print("\nStep 2: Publishing to Instagram Story...")
+    story_res = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media", data={
+        "media_type": "STORIES",
+        "video_url": video_url,
         "access_token": access_token
     }).json()
 
-    if "id" in pub:
-        print(f"Success! Reel with Hype Audio is LIVE on @card.stax: {pub['id']}")
+    if "id" in story_res:
+        story_container_id = story_res["id"]
+        print(f"Story Container ID: {story_container_id}. Waiting for processing...")
+        for _ in range(12):
+            time.sleep(8)
+            s_status = requests.get(f"https://graph.facebook.com/v21.0/{story_container_id}?fields=status_code&access_token={access_token}").json()
+            if s_status.get("status_code") == "FINISHED":
+                break
+
+        story_pub = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media_publish", data={
+            "creation_id": story_container_id,
+            "access_token": access_token
+        }).json()
+        if "id" in story_pub:
+            print(f"Success! Story is LIVE on @card.stax: {story_pub['id']}")
+            print("You can now tap 'Highlight' in the Instagram app to pin it to your profile!")
+        else:
+            print("Publishing Story error:", story_pub)
     else:
-        print("Publishing error:", pub)
-
-# --- MAIN EXECUTION ---
-if __name__ == "__main__":
-    topic = random.choice(REEL_TOPICS)
-    print(f"Creating Reel for: {topic['hook']}")
-
-    # Frame 1: Hook
-    make_intro_frame(topic, "f1_intro.png")
-
-    # Frames 2, 3, 4: Top 3 Cards
-    frames = ["f1_intro.png"]
-    for idx, card in enumerate(topic["cards"], start=1):
-        fpath = f"f_{idx}_card.png"
-        make_card_frame(card, idx, fpath)
-        frames.append(fpath)
-
-    # Frame 5: Outro Newsletter CTA
-    make_cta_frame("f5_cta.png")
-    frames.append("f5_cta.png")
-
-    print("Compiling 9:16 Reel with Audio...")
-    mp4_file = build_reel_mp4(frames, "pokepulse_reel.mp4")
-
-    print("Uploading MP4 to Cloudinary CDN...")
-    upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
-    video_cdn_url = upload_res.get("secure_url")
-    print(f"CDN URL: {video_cdn_url}")
-
-    caption = (
-        f"🔥 {topic['hook']} 🔥\n\n"
-        f"{topic['subhook']}\n\n"
-        f"Which card are you holding long term? Drop your pick below! 👇\n\n"
-        f"📬 Free Weekly Pokémon Market Reports -> Link in Bio!\n\n"
-        f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse"
-    )
-
-    publish_to_reels(video_cdn_url, caption)
+        print("Error initializing Story:", story_res)
+            publish_to_reels_and_story(video_cdn_url, caption)
