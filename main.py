@@ -7,24 +7,19 @@ import cloudinary.uploader
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
-# Cloudinary Setup from GitHub Secrets
 cloudinary.config(
     cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
 )
 
 API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse Reels Agent)"}
-
-# Verified Instagram Business Account ID for @card.stax (hardcoded to prevent any newline bugs)
 IG_USER_ID = "17841472317326348"
 
-# High-Energy Royalty-Free Audio Tracks
 HYPE_AUDIO_TRACKS = [
     "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",
     "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
     "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"
 ]
 
-# High-Hype Pokémon Cards for Viral Reels
 REEL_TOPICS = [
     {
         "hook": "THE MOST EXPENSIVE MODERN CARDS",
@@ -46,7 +41,6 @@ REEL_TOPICS = [
     }
 ]
 
-# --- TYPOGRAPHY & AUTO-FIT ---
 def get_font(size, bold=False):
     paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -93,7 +87,6 @@ def draw_autofit_text(draw, text, box, max_font_size=80, min_font_size=20, fill=
     draw.text((x, y), text, fill=fill, font=font)
     return font
 
-# --- 9:16 VERTICAL FRAME GENERATORS (1080x1920) ---
 W, H = 1080, 1920
 
 def make_intro_frame(topic, out_path="f1_intro.png"):
@@ -163,7 +156,6 @@ def make_cta_frame(out_path="f5_cta.png"):
     draw_autofit_text(draw, "TAP LINK IN BIO TO SUBSCRIBE FREE", (60, 1680, W - 60, 1780), max_font_size=42, min_font_size=22, fill="#FFE600", bold=True)
     base.save(out_path)
 
-# --- VIDEO RENDERING VIA FFMPEG ---
 def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
     durations = [2.5, 3.0, 3.0, 3.0, 3.0]
     total_duration = sum(durations)
@@ -175,7 +167,7 @@ def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
         f.write(f"file '{frame_files[-1]}'\n")
 
     audio_url = random.choice(HYPE_AUDIO_TRACKS)
-    print(f"Downloading high-energy audio track: {audio_url}")
+    print(f"Downloading audio track: {audio_url}")
     audio_data = requests.get(audio_url, headers=API_HEADERS).content
     with open("bg_audio.mp3", "wb") as f:
         f.write(audio_data)
@@ -195,11 +187,10 @@ def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
     subprocess.run(cmd, check=True)
     return output_mp4
 
-# --- PUBLISHING TO REELS AND STORY ---
 def publish_content(video_url, caption):
     access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
 
-    # 1. PUBLISH TO REELS
+    # 1. Post to Reels
     print("Step 1: Initializing Reels container with audio...")
     res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
         "media_type": "REELS",
@@ -230,7 +221,7 @@ def publish_content(video_url, caption):
     else:
         print("Reel Error:", res)
 
-    # 2. ALSO PUBLISH TO STORY (for Highlights)
+    # 2. Post to Story
     print("\nStep 2: Publishing to Story...")
     s_res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
         "media_type": "STORIES",
@@ -252,7 +243,6 @@ def publish_content(video_url, caption):
         print(f"Story Publish Result: {s_pub}")
     else:
         print("Story Error:", s_res)
-
 
 if __name__ == "__main__":
     topic = random.choice(REEL_TOPICS)
