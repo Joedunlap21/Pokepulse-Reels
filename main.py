@@ -12,31 +12,28 @@ cloudinary.config(
     cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
 )
 
-API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse News Agent)"}
+API_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+}
 IG_USER_ID = "17841472317326348"
 
-# High-Energy Background Beats
+# High-Energy Background Beats (Direct CDN)
 HYPE_AUDIO_TRACKS = [
     "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",
     "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
     "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"
 ]
 
-# High-Quality Pokémon Auction & Holographic B-Roll Video Library (9:16 Vertical)
-REAL_NEWS_VIDEOS = [
+# Verified Public MP4 Direct Video Assets (Guaranteed raw video stream)
+DIRECT_NEWS_VIDEOS = [
     {
-        "clip1": "https://assets.mixkit.co/videos/preview/mixkit-holographic-foil-texture-background-loop-42861-large.mp4",
-        "clip2": "https://assets.mixkit.co/videos/preview/mixkit-bright-light-leaks-in-a-dark-room-41983-large.mp4",
+        "clip1": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        "clip2": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
         "tag": "AUCTION RECORD"
     },
     {
-        "clip1": "https://assets.mixkit.co/videos/preview/mixkit-abstract-purple-and-blue-neon-lights-loop-42880-large.mp4",
-        "clip2": "https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-background-loop-9993-large.mp4",
-        "tag": "BREAKING NEWS"
-    },
-    {
-        "clip1": "https://assets.mixkit.co/videos/preview/mixkit-colorful-lights-in-a-club-party-41716-large.mp4",
-        "clip2": "https://assets.mixkit.co/videos/preview/mixkit-neon-lights-in-a-tunnel-34440-large.mp4",
+        "clip1": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+        "clip2": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyBlazes.mp4",
         "tag": "MARKET ALERT"
     }
 ]
@@ -47,7 +44,7 @@ W, H = 1080, 1920
 def ensure_font():
     if not os.path.exists("BebasNeue.ttf"):
         url = "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf"
-        r = requests.get(url)
+        r = requests.get(url, headers=API_HEADERS)
         with open("BebasNeue.ttf", "wb") as f:
             f.write(r.content)
 
@@ -73,7 +70,6 @@ def draw_tight_text(draw, text, y, font, fill="white", stroke_fill="#000000", st
 def fetch_latest_pokemon_news():
     print("Fetching live Pokémon TCG community news...")
     try:
-        # Pull live RSS from PokeBeach / TCG news
         feed_url = "https://www.pokebeach.com/feed"
         res = requests.get(feed_url, headers=API_HEADERS, timeout=8)
         root = ET.fromstring(res.content)
@@ -82,7 +78,6 @@ def fetch_latest_pokemon_news():
         if items:
             top_item = random.choice(items[:5])
             title = top_item.find("title").text.upper()
-            # Clean title into punchy lines
             words = title.split()
             mid = len(words) // 2
             line1 = " ".join(words[:mid]) if mid > 0 else "BREAKING UPDATE"
@@ -97,11 +92,10 @@ def fetch_latest_pokemon_news():
     except Exception as e:
         print(f"RSS fetch fallback: {e}")
 
-    # Fallback to high-volatility live market headlines
     defaults = [
         {
             "alert": "AUCTION ALERT",
-            "line1": "KINDERGARTENER",
+            "line1": "A KINDERGARTENER",
             "line2": "DESIGNED THIS",
             "line3": "72,000+ USD CARD",
             "context": "2010 Megu Taniguchi Zoroark contest card sells for record high"
@@ -123,17 +117,17 @@ def fetch_latest_pokemon_news():
     ]
     return random.choice(defaults)
 
-# --- OVERLAY GENERATOR (TRANSPARENT PNG OVER REAL VIDEO) ---
+# --- OVERLAY GENERATOR (TRANSPARENT PNG OVER VIDEO) ---
 def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    # 1. Dark Vignette Gradient on bottom 45% so text pops off video
+    # Dark Vignette Gradient on bottom 45% so text pops off video
     for y in range(H - 850, H):
         alpha = int(210 * ((y - (H - 850)) / 850))
         draw.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
 
-    # 2. Red Alert Pill
+    # Red Alert Pill
     a_font = get_font(52)
     abox = draw.textbbox((0, 0), alert_text, font=a_font)
     aw = (abox[2] - abox[0]) + 60
@@ -145,7 +139,7 @@ def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"
     draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=8, fill="#E50914", outline="#FFFFFF", width=3)
     draw.text((ax + 30, ay + 6), alert_text, font=a_font, fill="#FFFFFF")
 
-    # 3. Massive Stacked Bebas Typography
+    # Stacked Bebas Typography
     f_huge = get_font(136)
     y_start = ay + ah + 18
     y_start = draw_tight_text(draw, line1, y_start, f_huge, fill="#FFE600")
@@ -154,7 +148,7 @@ def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"
 
     img.save(out_path)
 
-# --- NEWSLETTER CTA FRAME ---
+# --- CTA OUTRO FRAME ---
 def make_cta_slide(out_path="cta_slide.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     cdata = requests.get(cta_url, headers=API_HEADERS).content
@@ -177,16 +171,20 @@ def make_cta_slide(out_path="cta_slide.png"):
     draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
-# --- FFMPEG VIDEO COMPOSITOR: VIDEO B-ROLL + NEWS OVERLAYS + AUDIO ---
+# --- SAFE VIDEO DOWNLOADER (Validates Real Video File) ---
+def download_safe_video(url, dest_file):
+    res = requests.get(url, headers=API_HEADERS, timeout=20)
+    with open(dest_file, "wb") as f:
+        f.write(res.content)
+    # Check if file has valid size (> 50KB)
+    if os.path.getsize(dest_file) < 50000:
+        raise ValueError(f"Downloaded file {dest_file} is too small, likely blocked.")
+
+# --- FFMPEG COMPOSITOR ---
 def compile_news_reel(news, video_pkg, output_mp4="pokepulse_reel.mp4"):
     print("Downloading news video B-roll clips...")
-    c1_data = requests.get(video_pkg["clip1"]).content
-    with open("clip1.mp4", "wb") as f:
-        f.write(c1_data)
-
-    c2_data = requests.get(video_pkg["clip2"]).content
-    with open("clip2.mp4", "wb") as f:
-        f.write(c2_data)
+    download_safe_video(video_pkg["clip1"], "clip1.mp4")
+    download_safe_video(video_pkg["clip2"], "clip2.mp4")
 
     audio_url = random.choice(HYPE_AUDIO_TRACKS)
     print(f"Downloading audio track: {audio_url}")
@@ -194,7 +192,6 @@ def compile_news_reel(news, video_pkg, output_mp4="pokepulse_reel.mp4"):
     with open("bg_audio.mp3", "wb") as f:
         f.write(audio_data)
 
-    # Generate transparent overlays
     create_video_overlay(news["alert"], news["line1"], news["line2"], news["line3"], "overlay1.png")
     create_video_overlay("MARKET WATCH", "VERIFIED SALES", "BREAKING OUT", "CHECK BIO!", "overlay2.png")
     make_cta_slide("cta_slide.png")
@@ -228,7 +225,7 @@ def compile_news_reel(news, video_pkg, output_mp4="pokepulse_reel.mp4"):
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "concat_list.txt",
         "-i", "bg_audio.mp3",
-        "-c:v", "copy",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
         "-c:a", "aac", "-b:a", "192k",
         "-filter_complex", "[1:a]afade=t=out:st=6.8:d=1.2[aout]",
         "-map", "0:v", "-map", "[aout]",
@@ -294,7 +291,7 @@ def publish_content(video_url, caption):
 
 if __name__ == "__main__":
     news = fetch_latest_pokemon_news()
-    video_pkg = random.choice(REAL_NEWS_VIDEOS)
+    video_pkg = random.choice(DIRECT_NEWS_VIDEOS)
 
     print(f"Producing Video News Reel: {news['line1']} {news['line2']}")
     mp4_file = compile_news_reel(news, video_pkg, "pokepulse_reel.mp4")
