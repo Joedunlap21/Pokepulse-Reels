@@ -11,153 +11,217 @@ cloudinary.config(
     cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
 )
 
-API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse Reels Agent)"}
+API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse Agency Engine)"}
 IG_USER_ID = "17841472317326348"
 
+# High-Energy Background Beats
 HYPE_AUDIO_TRACKS = [
     "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",
     "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
     "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"
 ]
 
-REEL_TOPICS = [
+# Curated High-Stakes Viral Stories & Market News (Matching Reference Graphics)
+VIRAL_NEWS_REELS = [
     {
-        "hook": "THE MOST EXPENSIVE MODERN CARDS",
-        "subhook": "HOLD OR SELL IN 2026?",
-        "cards": [
-            {"name": "UMBREON VMAX ALT ART", "set": "Evolving Skies", "price": "850.00 USD", "img": "https://images.pokemontcg.io/swsh7/215_hires.png"},
-            {"name": "GIRATINA V ALT ART", "set": "Lost Origin", "price": "395.00 USD", "img": "https://images.pokemontcg.io/swsh11/186_hires.png"},
-            {"name": "PIKACHU EX SIR", "set": "Surging Sparks", "price": "380.00 USD", "img": "https://images.pokemontcg.io/sv8/238_hires.png"}
-        ]
+        "alert": "AUCTION ALERT",
+        "headline_line1": "A KINDERGARTENER",
+        "headline_line2": "DESIGNED THIS",
+        "headline_line3": "72,000+ USD CARD.",
+        "colors": ["#FFE600", "#FFFFFF", "#00FF66"],
+        "hero_img": "https://images.pokemontcg.io/col1/22_hires.png",
+        "graph_title": "VINTAGE PROMO EXPLOSION",
+        "bars": [
+            {"label": "2018", "pct": "+350%", "h": 220},
+            {"label": "2021", "pct": "+1,420%", "h": 460},
+            {"label": "2024", "pct": "+2,880%", "h": 680},
+            {"label": "2026", "pct": "+3,650%", "h": 850}
+        ],
+        "story_sub": "THE ONLY BGS PRISTINE 10 FROM ENTIRE CONTEST"
     },
     {
-        "hook": "POKÉMON CARDS EXPLODING IN VALUE",
-        "subhook": "RECENT 30-DAY SALES SURGE",
-        "cards": [
-            {"name": "CHARIZARD EX SIR", "set": "151 Special Set", "price": "210.00 USD", "img": "https://images.pokemontcg.io/sv3pt5/199_hires.png"},
-            {"name": "TERAPAGOS EX SIR", "set": "Stellar Crown", "price": "145.00 USD", "img": "https://images.pokemontcg.io/sv7/170_hires.png"},
-            {"name": "MAGIKARP IR", "set": "Paldea Evolved", "price": "135.00 USD", "img": "https://images.pokemontcg.io/sv2/203_hires.png"}
-        ]
+        "alert": "TRENDING",
+        "headline_line1": "THE LOW POP",
+        "headline_line2": "VINTAGE MARKET",
+        "headline_line3": "IS SURGING.",
+        "colors": ["#FFE600", "#FFFFFF", "#00FF66"],
+        "hero_img": "https://images.pokemontcg.io/swsh7/215_hires.png",
+        "graph_title": "CALL OF LEGENDS YOY PRICING",
+        "bars": [
+            {"label": "LUGIA", "pct": "+3,500%", "h": 850},
+            {"label": "RAIKOU", "pct": "+3,201%", "h": 780},
+            {"label": "GROUDON", "pct": "+2,882%", "h": 700},
+            {"label": "RAYQUAZA", "pct": "+2,503%", "h": 610}
+        ],
+        "story_sub": "GRAILS ARE OFFICIALLY UP OVER 2,000% YOY"
+    },
+    {
+        "alert": "AUCTION ALERT",
+        "headline_line1": "LV.X GRAILS",
+        "headline_line2": "ARE MOVING",
+        "headline_line3": "RIDICULOUSLY FAST.",
+        "colors": ["#00FF66", "#FFFFFF", "#FFE600"],
+        "hero_img": "https://images.pokemontcg.io/pl3/146_hires.png",
+        "graph_title": "PLATINUM ERA MARKET BREAKOUT",
+        "bars": [
+            {"label": "RAW", "pct": "+210%", "h": 320},
+            {"label": "PSA 8", "pct": "+540%", "h": 490},
+            {"label": "PSA 9", "pct": "+1,180%", "h": 680},
+            {"label": "PSA 10", "pct": "+2,940%", "h": 860}
+        ],
+        "story_sub": "SUPREME VICTORS & PLATINUM SUPPLY DRIES UP"
     }
 ]
 
-def get_font(size, bold=False):
-    paths = [
-        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-        "Arial.ttf"
-    ]
-    for p in paths:
-        if os.path.exists(p):
-            try:
-                return ImageFont.truetype(p, size)
-            except Exception:
-                continue
-    return ImageFont.load_default()
-
-def draw_autofit_text(draw, text, box, max_font_size=80, min_font_size=20, fill="white", bold=True, align="center"):
-    x1, y1, x2, y2 = box
-    max_w = x2 - x1
-    max_h = y2 - y1
-
-    curr_size = max_font_size
-    font = get_font(curr_size, bold=bold)
-
-    while curr_size > min_font_size:
-        bbox = draw.textbbox((0, 0), text, font=font)
-        w = bbox[2] - bbox[0]
-        h = bbox[3] - bbox[1]
-        if w <= max_w and h <= max_h:
-            break
-        curr_size -= 2
-        font = get_font(curr_size, bold=bold)
-
-    bbox = draw.textbbox((0, 0), text, font=font)
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
-
-    if align == "center":
-        x = x1 + (max_w - w) / 2 - bbox[0]
-    elif align == "left":
-        x = x1 - bbox[0]
-    else:
-        x = x2 - w - bbox[0]
-
-    y = y1 + (max_h - h) / 2 - bbox[1]
-    draw.text((x, y), text, fill=fill, font=font)
-    return font
-
 W, H = 1080, 1920
 
-def make_intro_frame(topic, out_path="f1_intro.png"):
-    img = Image.new("RGB", (W, H), (10, 12, 16))
+# Download Bebas Neue for identical typography
+def ensure_font():
+    if not os.path.exists("BebasNeue.ttf"):
+        url = "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf"
+        r = requests.get(url)
+        with open("BebasNeue.ttf", "wb") as f:
+            f.write(r.content)
+
+ensure_font()
+
+def get_font(size):
+    if os.path.exists("BebasNeue.ttf"):
+        try:
+            return ImageFont.truetype("BebasNeue.ttf", size)
+        except Exception:
+            pass
+    return ImageFont.load_default()
+
+def draw_tight_text(draw, text, y, font, fill="white"):
+    bbox = draw.textbbox((0, 0), text, font=font)
+    w = bbox[2] - bbox[0]
+    x = (W - w) // 2
+    draw.text((x, y), text, font=font, fill=fill)
+    return y + (bbox[3] - bbox[1])
+
+# --- SLIDE 1: THE EXACT VIRAL HOOK (Matching Reference Images 1, 2, 4, 6) ---
+def make_viral_hook_frame(reel, out_path="f1_hook.png"):
+    img = Image.new("RGB", (W, H), (0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    pill_w, pill_h = 480, 70
-    pill_x1 = (W - pill_w) // 2
-    draw.rounded_rectangle([pill_x1, 280, pill_x1 + pill_w, 280 + pill_h], radius=35, fill="#E50914")
-    draw_autofit_text(draw, "MARKET WATCH 2026", (pill_x1, 280, pill_x1 + pill_w, 280 + pill_h), max_font_size=34, min_font_size=22, fill="#FFFFFF", bold=True)
+    # 1. Top 55%: Massive Macro Graded Slab Hero Visual
+    top_h = 1040
+    cdata = requests.get(reel["hero_img"], headers=API_HEADERS).content
+    with open("temp_slab.png", "wb") as f:
+        f.write(cdata)
 
-    draw_autofit_text(draw, topic["hook"], (60, 420, W - 60, 680), max_font_size=88, min_font_size=40, fill="#FFE600", bold=True)
-    draw_autofit_text(draw, topic["subhook"], (60, 720, W - 60, 820), max_font_size=42, min_font_size=24, fill="#00FF66", bold=True)
+    card = Image.open("temp_slab.png").convert("RGB")
+    # Crop and zoom into the foil/art
+    card_w, card_h = card.size
+    crop_box = (0, 0, card_w, int(card_h * 0.95))
+    cropped = card.crop(crop_box).resize((W, top_h), Image.Resampling.LANCZOS)
+    img.paste(cropped, (0, 0))
 
-    draw_autofit_text(draw, "@CARD.STAX", (60, 1600, W - 60, 1680), max_font_size=48, min_font_size=28, fill="#A0AEC0", bold=True)
+    # Dark gradient fade over bottom of image into pitch black
+    for y in range(top_h - 180, top_h):
+        alpha = int(255 * ((y - (top_h - 180)) / 180))
+        draw.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
+
+    # 2. Red Alert Pill Badge in Center
+    alert_text = reel["alert"]
+    a_font = get_font(52)
+    abox = draw.textbbox((0, 0), alert_text, font=a_font)
+    aw = (abox[2] - abox[0]) + 50
+    ah = 68
+    ax = (W - aw) // 2
+    ay = top_h - 34
+
+    draw.rounded_rectangle([ax + 3, ay + 4, ax + aw + 3, ay + ah + 4], radius=6, fill="#000000")
+    draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=6, fill="#E50914")
+    draw.text((ax + 25, ay + 6), alert_text, font=a_font, fill="#FFFFFF")
+
+    # 3. Bottom 45% (Pure Pitch Black): Huge Stacked Condensed Typography
+    f_huge = get_font(148)
+    y_start = top_h + 65
+
+    # Line 1 (e.g. Yellow)
+    y_start = draw_tight_text(draw, reel["headline_line1"], y_start, f_huge, fill=reel["colors"][0]) + 5
+    # Line 2 (Crisp White)
+    y_start = draw_tight_text(draw, reel["headline_line2"], y_start, f_huge, fill=reel["colors"][1]) + 5
+    # Line 3 (Neon Green)
+    y_start = draw_tight_text(draw, reel["headline_line3"], y_start, f_huge, fill=reel["colors"][2]) + 10
+
     img.save(out_path)
 
-def make_card_frame(card_data, rank, out_path):
-    img = Image.new("RGB", (W, H), (10, 12, 16))
+# --- SLIDE 2: THE NEON BAR GRAPH SLIDE (Matching Reference Image 5) ---
+def make_graph_frame(reel, out_path="f2_graph.png"):
+    img = Image.new("RGB", (W, H), (0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    pill_w, pill_h = 360, 64
-    pill_x1 = (W - pill_w) // 2
-    draw.rounded_rectangle([pill_x1, 140, pill_x1 + pill_w, 140 + pill_h], radius=32, fill="#E50914")
-    draw_autofit_text(draw, f"TOP HIT #{rank}", (pill_x1, 140, pill_x1 + pill_w, 140 + pill_h), max_font_size=32, min_font_size=22, fill="#FFFFFF", bold=True)
+    # Header Box
+    h_font = get_font(72)
+    sub_font = get_font(48)
+    draw_tight_text(draw, reel["graph_title"], 90, h_font, fill="#FFFFFF")
+    draw_tight_text(draw, "YEAR-OVER-YEAR ROI COMPARISON", 175, sub_font, fill="#A0AEC0")
 
-    draw_autofit_text(draw, card_data["name"], (60, 230, W - 60, 340), max_font_size=68, min_font_size=36, fill="#FFE600", bold=True)
+    # Graph Area
+    graph_base_y = 1100
+    bars = reel["bars"]
+    num_bars = len(bars)
+    bar_w = 160
+    total_w = num_bars * bar_w + (num_bars - 1) * 60
+    start_x = (W - total_w) // 2
 
-    img_data = requests.get(card_data["img"], headers=API_HEADERS).content
-    with open("temp_card.png", "wb") as f:
-        f.write(img_data)
+    for idx, b in enumerate(bars):
+        bx = start_x + idx * (bar_w + 60)
+        by = graph_base_y - b["h"]
+        
+        # Green Neon Bar
+        draw.rounded_rectangle([bx, by, bx + bar_w, graph_base_y], radius=8, fill="#00FF66", outline="#FFFFFF", width=2)
 
-    card = Image.open("temp_card.png").convert("RGBA")
-    card.thumbnail((720, 960), Image.Resampling.LANCZOS)
-    cw, ch = card.size
-    cx = (W - cw) // 2
-    cy = 380
+        # Percentage text above bar
+        p_font = get_font(42)
+        pbox = draw.textbbox((0, 0), b["pct"], font=p_font)
+        pw = pbox[2] - pbox[0]
+        draw.text((bx + (bar_w - pw) // 2, by - 55), b["pct"], font=p_font, fill="#00FF66")
 
-    draw.rounded_rectangle([cx - 12, cy - 6, cx + cw + 12, cy + ch + 14], radius=24, fill=(0, 0, 0))
-    img.paste(card, (cx, cy), mask=card.split()[3])
+        # Label under bar
+        l_font = get_font(44)
+        lbox = draw.textbbox((0, 0), b["label"], font=l_font)
+        lw = lbox[2] - lbox[0]
+        draw.text((bx + (bar_w - lw) // 2, graph_base_y + 20), b["label"], font=l_font, fill="#FFFFFF")
 
-    box_w, box_h = 800, 180
-    bx1 = (W - box_w) // 2
-    by1 = 1420
-    draw.rounded_rectangle([bx1, by1, bx1 + box_w, by1 + box_h], radius=24, fill="#161B22", outline="#00FF66", width=4)
-    draw_autofit_text(draw, f"VERIFIED MARKET FLOOR: {card_data['price']}", (bx1 + 20, by1 + 20, bx1 + box_w - 20, by1 + 100), max_font_size=42, min_font_size=24, fill="#FFFFFF", bold=True)
-    draw_autofit_text(draw, f"SET: {card_data['set'].upper()}", (bx1 + 20, by1 + 105, bx1 + box_w - 20, by1 + 160), max_font_size=32, min_font_size=20, fill="#A0AEC0", bold=True)
+    # Bottom Callout / Viral Punchline
+    f_huge = get_font(128)
+    draw_tight_text(draw, "PRICE SURGE", 1240, f_huge, fill="#00E5FF")
+    draw_tight_text(draw, "GRAILS ARE UP", 1365, f_huge, fill="#FFE600")
+    draw_tight_text(draw, ">2,000% YOY", 1490, f_huge, fill="#00FF66")
 
-    draw_autofit_text(draw, "@CARD.STAX", (60, 1720, W - 60, 1800), max_font_size=44, min_font_size=26, fill="#A0AEC0", bold=True)
+    # Sub-footer
+    b_font = get_font(38)
+    draw_tight_text(draw, reel["story_sub"], 1670, b_font, fill="#A0AEC0")
     img.save(out_path)
 
-def make_cta_frame(out_path="f5_cta.png"):
+# --- SLIDE 3: CUSTOM CTA OUTRO (Exact Newsletter Graphic) ---
+def make_cta_frame(out_path="f3_cta.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     cdata = requests.get(cta_url, headers=API_HEADERS).content
     with open("raw_cta.png", "wb") as f:
         f.write(cdata)
 
-    base = Image.new("RGB", (W, H), (10, 12, 16))
+    base = Image.new("RGB", (W, H), (0, 0, 0))
     cta_img = Image.open("raw_cta.png").convert("RGB")
     cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
     cw, ch = cta_img.size
     cx = (W - cw) // 2
-    cy = (H - ch) // 2
+    cy = 220
     base.paste(cta_img, (cx, cy))
 
     draw = ImageDraw.Draw(base)
-    draw_autofit_text(draw, "TAP LINK IN BIO TO SUBSCRIBE FREE", (60, 1680, W - 60, 1780), max_font_size=42, min_font_size=22, fill="#FFE600", bold=True)
+    c_font = get_font(52)
+    draw_tight_text(draw, "TAP LINK IN BIO TO SUBSCRIBE FREE", 1680, c_font, fill="#FFE600")
     base.save(out_path)
 
+# --- COMPILING HIGH-PACED 9:16 REEL WITH AUDIO ---
 def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
-    durations = [2.5, 3.0, 3.0, 3.0, 3.0]
+    # 4.5s hook, 5.0s graph breakdown, 3.5s CTA = 13.0s total
+    durations = [4.5, 5.0, 3.5]
     total_duration = sum(durations)
 
     with open("playlist.txt", "w") as f:
@@ -167,7 +231,7 @@ def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
         f.write(f"file '{frame_files[-1]}'\n")
 
     audio_url = random.choice(HYPE_AUDIO_TRACKS)
-    print(f"Downloading audio track: {audio_url}")
+    print(f"Downloading high-energy audio track: {audio_url}")
     audio_data = requests.get(audio_url, headers=API_HEADERS).content
     with open("bg_audio.mp3", "wb") as f:
         f.write(audio_data)
@@ -187,11 +251,11 @@ def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
     subprocess.run(cmd, check=True)
     return output_mp4
 
+# --- PUBLISHING ENGINE ---
 def publish_content(video_url, caption):
     access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
 
-    # 1. Post to Reels
-    print("Step 1: Initializing Reels container with audio...")
+    print("Step 1: Publishing Reel to Instagram...")
     res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
         "media_type": "REELS",
         "video_url": video_url,
@@ -200,11 +264,11 @@ def publish_content(video_url, caption):
     }).json()
 
     if "id" in res:
-        container_id = res["id"]
-        print(f"Reel Container ID: {container_id}. Transcoding...")
+        cid = res["id"]
+        print(f"Reel Container: {cid}. Transcoding...")
         for _ in range(15):
             time.sleep(10)
-            status = requests.get(f"https://graph.facebook.com/v21.0/{container_id}?fields=status_code&access_token={access_token}").json()
+            status = requests.get(f"https://graph.facebook.com/v21.0/{cid}?fields=status_code&access_token={access_token}").json()
             code = status.get("status_code")
             print(f"Status: {code}")
             if code == "FINISHED":
@@ -214,14 +278,13 @@ def publish_content(video_url, caption):
                 break
 
         pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
-            "creation_id": container_id,
+            "creation_id": cid,
             "access_token": access_token
         }).json()
         print(f"Reel Publish Result: {pub}")
     else:
         print("Reel Error:", res)
 
-    # 2. Post to Story
     print("\nStep 2: Publishing to Story...")
     s_res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
         "media_type": "STORIES",
@@ -230,36 +293,34 @@ def publish_content(video_url, caption):
     }).json()
 
     if "id" in s_res:
-        s_id = s_res["id"]
+        sid = s_res["id"]
         for _ in range(12):
             time.sleep(8)
-            s_status = requests.get(f"https://graph.facebook.com/v21.0/{s_id}?fields=status_code&access_token={access_token}").json()
+            s_status = requests.get(f"https://graph.facebook.com/v21.0/{sid}?fields=status_code&access_token={access_token}").json()
             if s_status.get("status_code") == "FINISHED":
                 break
         s_pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
-            "creation_id": s_id,
+            "creation_id": sid,
             "access_token": access_token
         }).json()
         print(f"Story Publish Result: {s_pub}")
-    else:
-        print("Story Error:", s_res)
 
 if __name__ == "__main__":
-    topic = random.choice(REEL_TOPICS)
-    print(f"Starting pipeline for: {topic['hook']}")
+    reel = random.choice(VIRAL_NEWS_REELS)
+    print(f"Generating Viral News Reel: {reel['headline_line1']} {reel['headline_line2']}")
 
-    make_intro_frame(topic, "f1_intro.png")
+    # 1. The Viral Hook Slide (Top Graded Slab + Red Alert + Huge Stacked Neon Text)
+    make_viral_hook_frame(reel, "f1_hook.png")
 
-    frames = ["f1_intro.png"]
-    for idx, card in enumerate(topic["cards"], start=1):
-        fpath = f"f_{idx}_card.png"
-        make_card_frame(card, idx, fpath)
-        frames.append(fpath)
+    # 2. The Growth Graph Slide (Neon Green Bars + Big Percentage Stats)
+    make_graph_frame(reel, "f2_graph.png")
 
-    make_cta_frame("f5_cta.png")
-    frames.append("f5_cta.png")
+    # 3. Custom Newsletter CTA Outro
+    make_cta_frame("f3_cta.png")
 
-    print("Rendering video with FFmpeg...")
+    frames = ["f1_hook.png", "f2_graph.png", "f3_cta.png"]
+
+    print("Rendering Studio 9:16 Video with FFmpeg...")
     mp4_file = build_reel_mp4(frames, "pokepulse_reel.mp4")
 
     print("Uploading to Cloudinary...")
@@ -268,11 +329,11 @@ if __name__ == "__main__":
     print(f"CDN URL: {video_cdn_url}")
 
     caption = (
-        f"🔥 {topic['hook']} 🔥\n\n"
-        f"{topic['subhook']}\n\n"
-        f"Which one are you holding long term? Drop your pick below! 👇\n\n"
-        f"📬 Free Weekly Pokémon Market Reports -> Link in Bio!\n\n"
-        f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse"
+        f"🚨 {reel['alert']} | {reel['headline_line1']} {reel['headline_line2']} {reel['headline_line3']}\n\n"
+        f"{reel['story_sub']}\n\n"
+        f"Are you buying vintage or sticking with modern? Drop your thoughts below! 👇\n\n"
+        f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
+        f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #VintagePokemon"
     )
 
     publish_content(video_cdn_url, caption)
