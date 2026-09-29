@@ -17,173 +17,6 @@ API_HEADERS = {
 }
 IG_USER_ID = "17841472317326348"
 
-# Raw GitHub Audio Tracks (Never blocked)
-HYPE_AUDIO_TRACKS = [
-    "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
-]
-
-NEWS_PHOTO_LIBRARY = [
-    {
-        "alert": "AUCTION ALERT",
-        "line1": "A KINDERGARTENER",
-        "line2": "DESIGNED THIS",
-        "line3": "72,000+ USD CARD",
-        "photo1": "https://images.pokemontcg.io/col1/22_hires.png",
-        "photo2": "https://images.pokemontcg.io/swsh7/215_hires.png",
-        "context": "2010 Megu Taniguchi contest winner Zoroark card hits all-time auction record"
-    },
-    {
-        "alert": "MARKET ALERT",
-        "line1": "GOLD STAR",
-        "line2": "CGC GRAILS",
-        "line3": "ENDING TONIGHT!",
-        "photo1": "https://images.pokemontcg.io/ex8/105_hires.png",
-        "photo2": "https://images.pokemontcg.io/ex14/100_hires.png",
-        "context": "Latias & Celebi Gold Star Pristine 10s breaking all historical price ceilings"
-    },
-    {
-        "alert": "TRENDING NOW",
-        "line1": "PLATINUM LV.X",
-        "line2": "ARE MOVING",
-        "line3": "INSANELY FAST",
-        "photo1": "https://images.pokemontcg.io/pl3/146_hires.png",
-        "photo2": "https://images.pokemontcg.io/dp7/103_hires.png",
-        "context": "Supreme Victors Rayquaza and Platinum era supply near extinction"
-    }
-]
-
-W, H = 1080, 1920
-
-def ensure_font():
-    if not os.path.exists("BebasNeue.ttf"):
-        url = "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf"
-        r = requests.get(url, headers=API_HEADERS)
-        with open("BebasNeue.ttf", "wb") as f:
-            f.write(r.content)
-
-ensure_font()
-
-def get_font(size):
-    if os.path.exists("BebasNeue.ttf"):
-        try:
-            return ImageFont.truetype("BebasNeue.ttf", size)
-        except Exception:
-            pass
-    return ImageFont.load_default()
-
-def draw_tight_text(draw, text, y, font, fill="white", stroke_fill="#000000", stroke_width=6):
-    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
-    x = (W - w) // 2
-    draw.text((x, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
-    return y + h - 6
-
-def fetch_live_news():
-    print("Checking for breaking Pokémon news...")
-    try:
-        res = requests.get("https://www.pokebeach.com/feed", headers=API_HEADERS, timeout=8)
-        root = ET.fromstring(res.content)
-        items = root.findall(".//item")
-        if items:
-            top_item = random.choice(items[:5])
-            title = top_item.find("title").text.upper()
-            words = title.split()
-            mid = len(words) // 2
-            line1 = " ".join(words[:mid]) if mid > 0 else "BREAKING UPDATE"
-            line2 = " ".join(words[mid:]) if mid > 0 else title
-            base = random.choice(NEWS_PHOTO_LIBRARY)
-            return {
-                "alert": "BREAKING NEWS",
-                "line1": line1[:22],
-                "line2": line2[:24],
-                "line3": "JUST ANNOUNCED!",
-                "photo1": base["photo1"],
-                "photo2": base["photo2"],
-                "context": title
-            }
-    except Exception as e:
-        print(f"Fallback to curated news: {e}")
-
-    return random.choice(NEWS_PHOTO_LIBRARY)
-
-def prepare_slab_base(photo_url, out_path="slab_base.png"):
-    img = Image.new("RGB", (W, H))
-    draw = ImageDraw.Draw(img)
-
-    r1, g1, b1 = 110, 70, 190
-    r2, g2, b2 = 32, 18, 60
-    for y in range(H):
-        t = y / H
-        r = int(r1 + (r2 - r1) * t)
-        g = int(g1 + (g2 - g1) * t)
-        b = int(b1 + (b2 - b1) * t)
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
-
-    for r_spot in range(650, 0, -35):
-        alpha = int(22 * (1 - r_spot / 650))
-        draw.ellipse([W//2 - r_spot, H//2 - r_spot, W//2 + r_spot, H//2 + r_spot], fill=(155 + alpha, 110 + alpha, 245 + alpha))
-
-    pdata = requests.get(photo_url, headers=API_HEADERS).content
-    with open("temp_raw.png", "wb") as f:
-        f.write(pdata)
-
-    card = Image.open("temp_raw.png").convert("RGBA")
-    card.thumbnail((920, 1260), Image.Resampling.LANCZOS)
-    cw, ch = card.size
-    cx = (W - cw) // 2
-    cy = 60
-
-    draw.rounded_rectangle([cx - 15, cy - 8, cx + cw + 15, cy + ch + 20], radius=28, fill=(15, 8, 30))
-    img.paste(card, (cx, cy), mask=card.split()[3])
-    img.save(out_path)
-
-def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"):
-    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
-    for y in range(H - 850, H):
-        alpha = int(220 * ((y - (H - 850)) / 850))
-        drawLook at the line numbers in your error log:
-`File ".../main.py", line 186, in compile_news_reel`
-`download_safe_video(video_pkg["clip1"], "clip1.mp4")`
-
-That means **the old code with `clip1.mp4` is still saved in GitHub!** The new code without any `download_safe_video` wasn't committed yet.
-
-Let's save the new code to `main.py` right now:
-
----
-
-### Step 1: Open `main.py`
-Click this direct link:
-👉 [Edit main.py in pokepulse-reels on GitHub](https://github.com/Joedunlap21/pokepulse-reels/edit/main/main.py)
-
----
-
-### Step 2: Replace Everything with This Clean Script
-Select all text in `main.py`, delete it, and paste this exact script:
-
-```python
-import os
-import random
-import time
-import subprocess
-import xml.etree.ElementTree as ET
-import cloudinary
-import cloudinary.uploader
-import requests
-from PIL import Image, ImageDraw, ImageFont
-
-cloudinary.config(
-    cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
-)
-
-API_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-}
-IG_USER_ID = "17841472317326348"
-
-# Verified High-Res News Photos
 NEWS_PHOTO_LIBRARY = [
     {
         "alert": "AUCTION ALERT",
@@ -350,7 +183,7 @@ def make_cta_slide(out_path="cta_slide.png"):
     base.save(out_path)
 
 def compile_cinematic_motion_reel(story, output_mp4="pokepulse_reel.mp4"):
-    print("Generating Scene 1 cinematic motion...")
+    print("Generating Scene 1...")
     prepare_slab_base(story["photo1"], "slab1.png")
     create_video_overlay(story["alert"], story["line1"], story["line2"], story["line3"], "overlay1.png")
 
@@ -362,7 +195,7 @@ def compile_cinematic_motion_reel(story, output_mp4="pokepulse_reel.mp4"):
         "-map", "[out]", "-t", "3.0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "scene1.mp4"
     ], check=True)
 
-    print("Generating Scene 2 cinematic motion...")
+    print("Generating Scene 2...")
     prepare_slab_base(story["photo2"], "slab2.png")
     create_video_overlay("MARKET WATCH", "PRISTINE POPULATION", "DROPPING DAILY", "SWIPE BIO!", "overlay2.png")
 
@@ -374,14 +207,13 @@ def compile_cinematic_motion_reel(story, output_mp4="pokepulse_reel.mp4"):
         "-map", "[out]", "-t", "3.0", "-c:v", "libx264", "-pix_fmt", "yuv420p", "scene2.mp4"
     ], check=True)
 
-    print("Generating Scene 3 CTA outro...")
+    print("Generating Scene 3 CTA...")
     make_cta_slide("cta_slide.png")
     subprocess.run([
         "ffmpeg", "-y", "-loop", "1", "-t", "2.0", "-i", "cta_slide.png",
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene3.mp4"
     ], check=True)
 
-    # Clean Synthetic Audio Track Generated Directly Inside Runner
     print("Generating pure audio track via FFmpeg...")
     audio_file = "bg_audio.mp3"
     subprocess.run([
@@ -389,7 +221,6 @@ def compile_cinematic_motion_reel(story, output_mp4="pokepulse_reel.mp4"):
         "-c:a", "libmp3lame", "-b:a", "192k", audio_file
     ], check=True)
 
-    # Concat scenes into finished 8.0s Reel
     with open("concat_list.txt", "w") as f:
         f.write("file 'scene1.mp4'\n")
         f.write("file 'scene2.mp4'\n")
