@@ -9,16 +9,19 @@ from PIL import Image, ImageDraw, ImageFont
 
 # Cloudinary Setup from GitHub Secrets
 cloudinary.config(
-    cloudinary_url=os.getenv("CLOUDINARY_URL")
+    cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
 )
 
 API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse Reels Agent)"}
 
-# High-Energy Royalty-Free Audio Tracks (Hype Trap / Upbeat Synth)
+# Verified Instagram Business Account ID for @card.stax (hardcoded to prevent any newline bugs)
+IG_USER_ID = "17841472317326348"
+
+# High-Energy Royalty-Free Audio Tracks
 HYPE_AUDIO_TRACKS = [
-    "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",  # Upbeat Action Trap Beat
-    "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",  # Energetic Electronic Hype
-    "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"   # Modern Hip Hop / Trap Beat
+    "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",
+    "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
+    "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"
 ]
 
 # High-Hype Pokémon Cards for Viral Reels
@@ -93,21 +96,18 @@ def draw_autofit_text(draw, text, box, max_font_size=80, min_font_size=20, fill=
 # --- 9:16 VERTICAL FRAME GENERATORS (1080x1920) ---
 W, H = 1080, 1920
 
-def make_intro_frame(topic, out_path="frame_intro.png"):
+def make_intro_frame(topic, out_path="f1_intro.png"):
     img = Image.new("RGB", (W, H), (10, 12, 16))
     draw = ImageDraw.Draw(img)
 
-    # Red Pill Hook
     pill_w, pill_h = 480, 70
     pill_x1 = (W - pill_w) // 2
     draw.rounded_rectangle([pill_x1, 280, pill_x1 + pill_w, 280 + pill_h], radius=35, fill="#E50914")
     draw_autofit_text(draw, "MARKET WATCH 2026", (pill_x1, 280, pill_x1 + pill_w, 280 + pill_h), max_font_size=34, min_font_size=22, fill="#FFFFFF", bold=True)
 
-    # Big Hook Headline
     draw_autofit_text(draw, topic["hook"], (60, 420, W - 60, 680), max_font_size=88, min_font_size=40, fill="#FFE600", bold=True)
     draw_autofit_text(draw, topic["subhook"], (60, 720, W - 60, 820), max_font_size=42, min_font_size=24, fill="#00FF66", bold=True)
 
-    # Branding
     draw_autofit_text(draw, "@CARD.STAX", (60, 1600, W - 60, 1680), max_font_size=48, min_font_size=28, fill="#A0AEC0", bold=True)
     img.save(out_path)
 
@@ -115,16 +115,13 @@ def make_card_frame(card_data, rank, out_path):
     img = Image.new("RGB", (W, H), (10, 12, 16))
     draw = ImageDraw.Draw(img)
 
-    # Top Alert
     pill_w, pill_h = 360, 64
     pill_x1 = (W - pill_w) // 2
     draw.rounded_rectangle([pill_x1, 140, pill_x1 + pill_w, 140 + pill_h], radius=32, fill="#E50914")
     draw_autofit_text(draw, f"TOP HIT #{rank}", (pill_x1, 140, pill_x1 + pill_w, 140 + pill_h), max_font_size=32, min_font_size=22, fill="#FFFFFF", bold=True)
 
-    # Card Name
     draw_autofit_text(draw, card_data["name"], (60, 230, W - 60, 340), max_font_size=68, min_font_size=36, fill="#FFE600", bold=True)
 
-    # Card Visual
     img_data = requests.get(card_data["img"], headers=API_HEADERS).content
     with open("temp_card.png", "wb") as f:
         f.write(img_data)
@@ -138,7 +135,6 @@ def make_card_frame(card_data, rank, out_path):
     draw.rounded_rectangle([cx - 12, cy - 6, cx + cw + 12, cy + ch + 14], radius=24, fill=(0, 0, 0))
     img.paste(card, (cx, cy), mask=card.split()[3])
 
-    # Price Box
     box_w, box_h = 800, 180
     bx1 = (W - box_w) // 2
     by1 = 1420
@@ -146,11 +142,10 @@ def make_card_frame(card_data, rank, out_path):
     draw_autofit_text(draw, f"VERIFIED MARKET FLOOR: {card_data['price']}", (bx1 + 20, by1 + 20, bx1 + box_w - 20, by1 + 100), max_font_size=42, min_font_size=24, fill="#FFFFFF", bold=True)
     draw_autofit_text(draw, f"SET: {card_data['set'].upper()}", (bx1 + 20, by1 + 105, bx1 + box_w - 20, by1 + 160), max_font_size=32, min_font_size=20, fill="#A0AEC0", bold=True)
 
-    # Footer
     draw_autofit_text(draw, "@CARD.STAX", (60, 1720, W - 60, 1800), max_font_size=44, min_font_size=26, fill="#A0AEC0", bold=True)
     img.save(out_path)
 
-def make_cta_frame(out_path="frame_cta.png"):
+def make_cta_frame(out_path="f5_cta.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     cdata = requests.get(cta_url, headers=API_HEADERS).content
     with open("raw_cta.png", "wb") as f:
@@ -168,9 +163,9 @@ def make_cta_frame(out_path="frame_cta.png"):
     draw_autofit_text(draw, "TAP LINK IN BIO TO SUBSCRIBE FREE", (60, 1680, W - 60, 1780), max_font_size=42, min_font_size=22, fill="#FFE600", bold=True)
     base.save(out_path)
 
-# --- VIDEO RENDERING VIA FFMPEG WITH AUDIO MUXING ---
+# --- VIDEO RENDERING VIA FFMPEG ---
 def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
-    durations = [2.5, 3.0, 3.0, 3.0, 3.0]  # Total = 14.5 seconds
+    durations = [2.5, 3.0, 3.0, 3.0, 3.0]
     total_duration = sum(durations)
 
     with open("playlist.txt", "w") as f:
@@ -179,14 +174,12 @@ def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
             f.write(f"duration {dur}\n")
         f.write(f"file '{frame_files[-1]}'\n")
 
-    # Download a random hype audio track
     audio_url = random.choice(HYPE_AUDIO_TRACKS)
     print(f"Downloading high-energy audio track: {audio_url}")
     audio_data = requests.get(audio_url, headers=API_HEADERS).content
     with open("bg_audio.mp3", "wb") as f:
         f.write(audio_data)
 
-    # Concat frames + mux audio, trim audio to exact video length, add 1.5s audio fadeout
     cmd = [
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", "playlist.txt",
@@ -201,19 +194,14 @@ def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
     ]
     subprocess.run(cmd, check=True)
     return output_mp4
-# --- INSTAGRAM REELS & STORY PUBLISHING ---
-def publish_to_reels_and_story(video_url, caption):
-    # .strip() guarantees no accidental hidden spaces or newlines break the request
-    ig_user_id = os.getenv("IG_USER_ID", "").strip()
-    access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
 
-    if not ig_user_id or not access_token:
-        print("Missing IG_USER_ID or IG_ACCESS_TOKEN.")
-        return
+# --- PUBLISHING TO REELS AND STORY ---
+def publish_content(video_url, caption):
+    access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
 
     # 1. PUBLISH TO REELS
     print("Step 1: Initializing Reels container with audio...")
-    res = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media", data={
+    res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
         "media_type": "REELS",
         "video_url": video_url,
         "caption": caption,
@@ -222,53 +210,79 @@ def publish_to_reels_and_story(video_url, caption):
 
     if "id" in res:
         container_id = res["id"]
-        print(f"Reel Container ID: {container_id}. Waiting for processing...")
+        print(f"Reel Container ID: {container_id}. Transcoding...")
         for _ in range(15):
             time.sleep(10)
             status = requests.get(f"https://graph.facebook.com/v21.0/{container_id}?fields=status_code&access_token={access_token}").json()
-            print(f"Processing status: {status.get('status_code')}")
-            if status.get("status_code") == "FINISHED":
+            code = status.get("status_code")
+            print(f"Status: {code}")
+            if code == "FINISHED":
                 break
-            elif status.get("status_code") == "ERROR":
-                print("Video encoding failed on Instagram's end.")
+            elif code == "ERROR":
+                print("Encoding error on Instagram.")
                 break
 
-        pub = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media_publish", data={
+        pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
             "creation_id": container_id,
             "access_token": access_token
         }).json()
-        if "id" in pub:
-            print(f"Success! Reel is LIVE on @card.stax: {pub['id']}")
-        else:
-            print("Publishing Reel error:", pub)
+        print(f"Reel Publish Result: {pub}")
     else:
-        print("Error initializing Reel:", res)
+        print("Reel Error:", res)
 
-    # 2. ALSO PUBLISH TO STORY (so you can save it to Highlights!)
-    print("\nStep 2: Publishing to Instagram Story...")
-    story_res = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media", data={
+    # 2. ALSO PUBLISH TO STORY (for Highlights)
+    print("\nStep 2: Publishing to Story...")
+    s_res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
         "media_type": "STORIES",
         "video_url": video_url,
         "access_token": access_token
     }).json()
 
-    if "id" in story_res:
-        story_container_id = story_res["id"]
-        print(f"Story Container ID: {story_container_id}. Waiting for processing...")
+    if "id" in s_res:
+        s_id = s_res["id"]
         for _ in range(12):
             time.sleep(8)
-            s_status = requests.get(f"https://graph.facebook.com/v21.0/{story_container_id}?fields=status_code&access_token={access_token}").json()
+            s_status = requests.get(f"https://graph.facebook.com/v21.0/{s_id}?fields=status_code&access_token={access_token}").json()
             if s_status.get("status_code") == "FINISHED":
                 break
-
-        story_pub = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media_publish", data={
-            "creation_id": story_container_id,
+        s_pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
+            "creation_id": s_id,
             "access_token": access_token
         }).json()
-        if "id" in story_pub:
-            print(f"Success! Story is LIVE on @card.stax: {story_pub['id']}")
-            print("You can now tap 'Highlight' in the Instagram app to pin it to your profile!")
-        else:
-            print("Publishing Story error:", story_pub)
+        print(f"Story Publish Result: {s_pub}")
     else:
-        print("Error initializing Story:", story_res)
+        print("Story Error:", s_res)
+
+
+if __name__ == "__main__":
+    topic = random.choice(REEL_TOPICS)
+    print(f"Starting pipeline for: {topic['hook']}")
+
+    make_intro_frame(topic, "f1_intro.png")
+
+    frames = ["f1_intro.png"]
+    for idx, card in enumerate(topic["cards"], start=1):
+        fpath = f"f_{idx}_card.png"
+        make_card_frame(card, idx, fpath)
+        frames.append(fpath)
+
+    make_cta_frame("f5_cta.png")
+    frames.append("f5_cta.png")
+
+    print("Rendering video with FFmpeg...")
+    mp4_file = build_reel_mp4(frames, "pokepulse_reel.mp4")
+
+    print("Uploading to Cloudinary...")
+    upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
+    video_cdn_url = upload_res.get("secure_url")
+    print(f"CDN URL: {video_cdn_url}")
+
+    caption = (
+        f"🔥 {topic['hook']} 🔥\n\n"
+        f"{topic['subhook']}\n\n"
+        f"Which one are you holding long term? Drop your pick below! 👇\n\n"
+        f"📬 Free Weekly Pokémon Market Reports -> Link in Bio!\n\n"
+        f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse"
+    )
+
+    publish_content(video_cdn_url, caption)
