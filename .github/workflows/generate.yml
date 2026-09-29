@@ -1,10 +1,13 @@
-name: Generate Story Cover
+name: PokePulse Auto Reels
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: '0 13,17,1 * * *'
+    - cron: '30 21 * * *'
 
 jobs:
-  build:
+  render_and_post_reel:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -14,16 +17,18 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Install dependencies
+      - name: Install FFmpeg
         run: |
-          pip install -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
 
-      - name: Run cover generator
+      - name: Install Python dependencies
         run: |
-          python main.py
+          pip install requests pillow cloudinary
 
-      - name: Save output image
-        uses: actions/upload-artifact@v4
-        with:
-          name: viral-story-cover
-          path: test_cover.png
+      - name: Generate & Publish Reel
+        env:
+          CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: python main.py
