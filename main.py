@@ -2,6 +2,7 @@ import os
 import random
 import time
 import subprocess
+import xml.etree.ElementTree as ET
 import cloudinary
 import cloudinary.uploader
 import requests
@@ -11,7 +12,7 @@ cloudinary.config(
     cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
 )
 
-API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse Purple Studio Engine)"}
+API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse News Agent)"}
 IG_USER_ID = "17841472317326348"
 
 # High-Energy Background Beats
@@ -21,57 +22,28 @@ HYPE_AUDIO_TRACKS = [
     "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"
 ]
 
-VIRAL_NEWS_REELS = [
+# High-Quality Pokémon Auction & Holographic B-Roll Video Library (9:16 Vertical)
+REAL_NEWS_VIDEOS = [
     {
-        "alert": "AUCTION ALERT",
-        "headline_line1": "A KINDERGARTENER",
-        "headline_line2": "DESIGNED THIS",
-        "headline_line3": "72,000+ USD CARD",
-        "hero_img": "https://images.pokemontcg.io/col1/22_hires.png",
-        "graph_title": "VINTAGE PROMO SURGE",
-        "bars": [
-            {"label": "2020", "pct": "+350%", "val": 220},
-            {"label": "2022", "pct": "+1,420%", "val": 480},
-            {"label": "2024", "pct": "+2,880%", "val": 710},
-            {"label": "2026", "pct": "+3,650%", "val": 920}
-        ],
-        "story_sub": "ONLY BGS PRISTINE 10 IN EXISTENCE"
+        "clip1": "https://assets.mixkit.co/videos/preview/mixkit-holographic-foil-texture-background-loop-42861-large.mp4",
+        "clip2": "https://assets.mixkit.co/videos/preview/mixkit-bright-light-leaks-in-a-dark-room-41983-large.mp4",
+        "tag": "AUCTION RECORD"
     },
     {
-        "alert": "TRENDING NOW",
-        "headline_line1": "THE LOW POP",
-        "headline_line2": "VINTAGE MARKET",
-        "headline_line3": "IS EXPLODING",
-        "hero_img": "https://images.pokemontcg.io/swsh7/215_hires.png",
-        "graph_title": "CALL OF LEGENDS YOY",
-        "bars": [
-            {"label": "LUGIA", "pct": "+3,500%", "val": 940},
-            {"label": "RAIKOU", "pct": "+3,201%", "val": 810},
-            {"label": "GROUDON", "pct": "+2,882%", "val": 720},
-            {"label": "RAYQUAZA", "pct": "+2,503%", "val": 630}
-        ],
-        "story_sub": "GRAILS SURGING OVER 2,000% YOY"
+        "clip1": "https://assets.mixkit.co/videos/preview/mixkit-abstract-purple-and-blue-neon-lights-loop-42880-large.mp4",
+        "clip2": "https://assets.mixkit.co/videos/preview/mixkit-stars-in-space-background-loop-9993-large.mp4",
+        "tag": "BREAKING NEWS"
     },
     {
-        "alert": "MARKET ALERT",
-        "headline_line1": "PLATINUM LV.X",
-        "headline_line2": "ARE MOVING",
-        "headline_line3": "INSANELY FAST",
-        "hero_img": "https://images.pokemontcg.io/pl3/146_hires.png",
-        "graph_title": "PLATINUM ERA BREAKOUT",
-        "bars": [
-            {"label": "RAW", "pct": "+210%", "val": 260},
-            {"label": "PSA 8", "pct": "+540%", "val": 490},
-            {"label": "PSA 9", "pct": "+1,180%", "val": 710},
-            {"label": "PSA 10", "pct": "+2,940%", "val": 930}
-        ],
-        "story_sub": "SUPREME VICTORS SUPPLY NEAR ZERO"
+        "clip1": "https://assets.mixkit.co/videos/preview/mixkit-colorful-lights-in-a-club-party-41716-large.mp4",
+        "clip2": "https://assets.mixkit.co/videos/preview/mixkit-neon-lights-in-a-tunnel-34440-large.mp4",
+        "tag": "MARKET ALERT"
     }
 ]
 
 W, H = 1080, 1920
 
-# Download Bebas Neue for identical typography
+# Download Bebas Neue
 def ensure_font():
     if not os.path.exists("BebasNeue.ttf"):
         url = "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf"
@@ -89,194 +61,181 @@ def get_font(size):
             pass
     return ImageFont.load_default()
 
-# --- DYNAMIC TEXT AUTO-FITTER (Guarantees Text Fits Every Time) ---
-def draw_fitted_text(draw, text, y, max_w=940, target_size=120, min_size=40, fill="white", stroke_fill="#000000", stroke_width=6):
-    curr_size = target_size
-    font = get_font(curr_size)
-
-    while curr_size > min_size:
-        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
-        w = bbox[2] - bbox[0]
-        if w <= max_w:
-            break
-        curr_size -= 2
-        font = get_font(curr_size)
-
+def draw_tight_text(draw, text, y, font, fill="white", stroke_fill="#000000", stroke_width=6):
     bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
     x = (W - w) // 2
-
     draw.text((x, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
-    return y + h + 8
+    return y + h - 6
 
-# --- LIGHT PURPLE STUDIO GRADIENT ---
-def create_purple_studio_background():
-    img = Image.new("RGB", (W, H))
+# --- LIVE POKÉMON NEWS FETCHER ---
+def fetch_latest_pokemon_news():
+    print("Fetching live Pokémon TCG community news...")
+    try:
+        # Pull live RSS from PokeBeach / TCG news
+        feed_url = "https://www.pokebeach.com/feed"
+        res = requests.get(feed_url, headers=API_HEADERS, timeout=8)
+        root = ET.fromstring(res.content)
+        items = root.findall(".//item")
+
+        if items:
+            top_item = random.choice(items[:5])
+            title = top_item.find("title").text.upper()
+            # Clean title into punchy lines
+            words = title.split()
+            mid = len(words) // 2
+            line1 = " ".join(words[:mid]) if mid > 0 else "BREAKING UPDATE"
+            line2 = " ".join(words[mid:]) if mid > 0 else title
+            return {
+                "alert": "BREAKING NEWS",
+                "line1": line1[:22],
+                "line2": line2[:24],
+                "line3": "JUST ANNOUNCED!",
+                "context": title
+            }
+    except Exception as e:
+        print(f"RSS fetch fallback: {e}")
+
+    # Fallback to high-volatility live market headlines
+    defaults = [
+        {
+            "alert": "AUCTION ALERT",
+            "line1": "KINDERGARTENER",
+            "line2": "DESIGNED THIS",
+            "line3": "72,000+ USD CARD",
+            "context": "2010 Megu Taniguchi Zoroark contest card sells for record high"
+        },
+        {
+            "alert": "MARKET ALERT",
+            "line1": "GOLD STAR",
+            "line2": "CGC GRAILS",
+            "line3": "ENDING TONIGHT!",
+            "context": "Latias & Celebi Gold Star Pristine 10s breaking all auction records"
+        },
+        {
+            "alert": "TRENDING NOW",
+            "line1": "PLATINUM LV.X",
+            "line2": "ARE MOVING",
+            "line3": "INSANELY FAST",
+            "context": "Supreme Victors and Platinum holos completely drying up on market"
+        }
+    ]
+    return random.choice(defaults)
+
+# --- OVERLAY GENERATOR (TRANSPARENT PNG OVER REAL VIDEO) ---
+def create_video_overlay(alert_text, line1, line2, line3, out_path="overlay.png"):
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
 
-    r1, g1, b1 = 120, 80, 205   # Vibrant royal lavender
-    r2, g2, b2 = 38, 22, 75     # Deep luxury purple
-
-    for y in range(H):
-        t = y / H
-        r = int(r1 + (r2 - r1) * t)
-        g = int(g1 + (g2 - g1) * t)
-        b = int(b1 + (b2 - b1) * t)
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
-
-    # Center ambient spotlight
-    for r_spot in range(650, 0, -35):
-        alpha = int(22 * (1 - r_spot / 650))
-        draw.ellipse([W//2 - r_spot, H//2 - r_spot, W//2 + r_spot, H//2 + r_spot], fill=(155 + alpha, 110 + alpha, 245 + alpha))
-
-    return img
-
-# --- SLIDE 1: VIRAL HOOK (PERFECT TEXT FIT & ZERO OVERFLOW) ---
-def make_viral_hook_frame(reel, out_path="f1_hook.png"):
-    img = create_purple_studio_background()
-    draw = ImageDraw.Draw(img)
-
-    # 1. Graded Slab Hero Visual (Scaled to leave room for text)
-    cdata = requests.get(reel["hero_img"], headers=API_HEADERS).content
-    with open("temp_hero.png", "wb") as f:
-        f.write(cdata)
-
-    card = Image.open("temp_hero.png").convert("RGBA")
-    card.thumbnail((880, 1080), Image.Resampling.LANCZOS)
-    cw, ch = card.size
-    cx = (W - cw) // 2
-    cy = 60
-
-    # Slab Shadow
-    draw.rounded_rectangle([cx - 15, cy - 8, cx + cw + 15, cy + ch + 20], radius=28, fill=(20, 10, 45))
-    img.paste(card, (cx, cy), mask=card.split()[3])
+    # 1. Dark Vignette Gradient on bottom 45% so text pops off video
+    for y in range(H - 850, H):
+        alpha = int(210 * ((y - (H - 850)) / 850))
+        draw.line([(0, y), (W, y)], fill=(0, 0, 0, alpha))
 
     # 2. Red Alert Pill
-    alert_text = reel["alert"]
-    a_font = get_font(46)
+    a_font = get_font(52)
     abox = draw.textbbox((0, 0), alert_text, font=a_font)
-    aw = (abox[2] - abox[0]) + 54
-    ah = 64
+    aw = (abox[2] - abox[0]) + 60
+    ah = 68
     ax = (W - aw) // 2
-    ay = cy + ch - 70
+    ay = H - 680
 
-    draw.rounded_rectangle([ax + 4, ay + 5, ax + aw + 4, ay + ah + 5], radius=32, fill="#000000")
-    draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=32, fill="#E50914", outline="#FFFFFF", width=3)
-    draw.text((ax + 27, ay + 7), alert_text, font=a_font, fill="#FFFFFF")
+    draw.rounded_rectangle([ax + 3, ay + 4, ax + aw + 3, ay + ah + 4], radius=10, fill=(0, 0, 0, 220))
+    draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=8, fill="#E50914", outline="#FFFFFF", width=3)
+    draw.text((ax + 30, ay + 6), alert_text, font=a_font, fill="#FFFFFF")
 
-    # 3. Stacked Headline with Dynamic Auto-Fitting
-    y_start = ay + ah + 25
-    y_start = draw_fitted_text(draw, reel["headline_line1"], y_start, max_w=940, target_size=118, fill="#FFE600")
-    y_start = draw_fitted_text(draw, reel["headline_line2"], y_start, max_w=940, target_size=118, fill="#FFFFFF")
-    draw_fitted_text(draw, reel["headline_line3"], y_start, max_w=940, target_size=118, fill="#00FF66")
-
-    img.save(out_path)
-
-# --- SLIDE 2: MODERN GRAPH SLIDE ---
-def make_graph_frame(reel, out_path="f2_graph.png"):
-    img = create_purple_studio_background()
-    draw = ImageDraw.Draw(img)
-
-    # 1. Header with Auto-Fitting
-    draw_fitted_text(draw, reel["graph_title"], 90, max_w=960, target_size=68, fill="#FFFFFF")
-    draw_fitted_text(draw, "YEAR-OVER-YEAR ROI COMPARISON", 175, max_w=900, target_size=38, fill="#D6BCFA", stroke_width=0)
-
-    # 2. Glassmorphic Chart Box
-    box_w, box_h = 960, 1140
-    bx = (W - box_w) // 2
-    by = 250
-    draw.rounded_rectangle([bx, by, bx + box_w, by + box_h], radius=32, fill=(28, 16, 58), outline="#7C3AED", width=3)
-
-    for y_offset in [by + 250, by + 500, by + 750]:
-        draw.line([(bx + 40, y_offset), (bx + box_w - 40, y_offset)], fill=(75, 45, 130), width=2)
-
-    base_y = by + 930
-    bars = reel["bars"]
-    n_bars = len(bars)
-    bar_w = 150
-    spacing = 55
-    total_w = n_bars * bar_w + (n_bars - 1) * spacing
-    start_x = bx + (box_w - total_w) // 2
-
-    for idx, b in enumerate(bars):
-        cur_x = start_x + idx * (bar_w + spacing)
-        bar_h = b["val"]
-        cur_y = base_y - bar_h
-
-        draw.rounded_rectangle([cur_x - 3, cur_y - 3, cur_x + bar_w + 3, base_y + 3], radius=22, fill=(10, 5, 25))
-        draw.rounded_rectangle([cur_x, cur_y, cur_x + bar_w, base_y], radius=20, fill="#00FF66", outline="#FFFFFF", width=3)
-
-        p_font = get_font(38)
-        pbox = draw.textbbox((0, 0), b["pct"], font=p_font)
-        pw = pbox[2] - pbox[0]
-        draw.rounded_rectangle([cur_x - 10, cur_y - 60, cur_x + bar_w + 10, cur_y - 12], radius=14, fill="#120A24", outline="#00FF66", width=2)
-        draw.text((cur_x + (bar_w - pw) // 2, cur_y - 56), b["pct"], font=p_font, fill="#00FF66")
-
-        l_font = get_font(42)
-        lbox = draw.textbbox((0, 0), b["label"], font=l_font)
-        lw = lbox[2] - lbox[0]
-        draw.text((cur_x + (bar_w - lw) // 2, base_y + 22), b["label"], font=l_font, fill="#FFFFFF")
-
-    # 3. Bottom Callout with Auto-Fitting
-    draw_fitted_text(draw, "GRAILS SURGING >2,000%", 1460, max_w=940, target_size=98, fill="#FFE600")
-    draw_fitted_text(draw, reel["story_sub"], 1565, max_w=940, target_size=42, fill="#FFFFFF", stroke_width=0)
+    # 3. Massive Stacked Bebas Typography
+    f_huge = get_font(136)
+    y_start = ay + ah + 18
+    y_start = draw_tight_text(draw, line1, y_start, f_huge, fill="#FFE600")
+    y_start = draw_tight_text(draw, line2, y_start, f_huge, fill="#FFFFFF")
+    draw_tight_text(draw, line3, y_start, f_huge, fill="#00FF66")
 
     img.save(out_path)
 
-# --- SLIDE 3: CUSTOM CTA OUTRO ---
-def make_cta_frame(out_path="f3_cta.png"):
+# --- NEWSLETTER CTA FRAME ---
+def make_cta_slide(out_path="cta_slide.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     cdata = requests.get(cta_url, headers=API_HEADERS).content
     with open("raw_cta.png", "wb") as f:
         f.write(cdata)
 
-    base = create_purple_studio_background()
+    base = Image.new("RGB", (W, H), (30, 18, 58))
     cta_img = Image.open("raw_cta.png").convert("RGB")
     cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
     cw, ch = cta_img.size
     cx = (W - cw) // 2
-    cy = 200
+    cy = 180
     base.paste(cta_img, (cx, cy))
 
     draw = ImageDraw.Draw(base)
-    draw.rounded_rectangle([80, 1630, W - 80, 1740], radius=55, fill="#FFE600", outline="#FFFFFF", width=3)
-    c_font = get_font(50)
+    draw.rounded_rectangle([80, 1620, W - 80, 1730], radius=55, fill="#FFE600", outline="#FFFFFF", width=3)
+    c_font = get_font(52)
     c_box = draw.textbbox((0, 0), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font)
     cw_txt = c_box[2] - c_box[0]
-    draw.text(((W - cw_txt) // 2, 1658), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
+    draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
-# --- FAST-PACED REEL COMPILER ---
-def build_snappy_reel(frame_files, output_mp4="pokepulse_reel.mp4"):
-    durations = [2.2, 2.8, 2.0]
-    total_duration = sum(durations)
+# --- FFMPEG VIDEO COMPOSITOR: VIDEO B-ROLL + NEWS OVERLAYS + AUDIO ---
+def compile_news_reel(news, video_pkg, output_mp4="pokepulse_reel.mp4"):
+    print("Downloading news video B-roll clips...")
+    c1_data = requests.get(video_pkg["clip1"]).content
+    with open("clip1.mp4", "wb") as f:
+        f.write(c1_data)
 
-    with open("playlist.txt", "w") as f:
-        for frame, dur in zip(frame_files, durations):
-            f.write(f"file '{frame}'\n")
-            f.write(f"duration {dur}\n")
-        f.write(f"file '{frame_files[-1]}'\n")
+    c2_data = requests.get(video_pkg["clip2"]).content
+    with open("clip2.mp4", "wb") as f:
+        f.write(c2_data)
 
     audio_url = random.choice(HYPE_AUDIO_TRACKS)
-    print(f"Downloading audio: {audio_url}")
+    print(f"Downloading audio track: {audio_url}")
     audio_data = requests.get(audio_url, headers=API_HEADERS).content
     with open("bg_audio.mp3", "wb") as f:
         f.write(audio_data)
 
-    cmd = [
-        "ffmpeg", "-y",
-        "-f", "concat", "-safe", "0", "-i", "playlist.txt",
+    # Generate transparent overlays
+    create_video_overlay(news["alert"], news["line1"], news["line2"], news["line3"], "overlay1.png")
+    create_video_overlay("MARKET WATCH", "VERIFIED SALES", "BREAKING OUT", "CHECK BIO!", "overlay2.png")
+    make_cta_slide("cta_slide.png")
+
+    # Render Scene 1 with Overlay (3.0s)
+    subprocess.run([
+        "ffmpeg", "-y", "-t", "3.0", "-i", "clip1.mp4", "-i", "overlay1.png",
+        "-filter_complex", "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0];[v0][1:v]overlay=0:0[out]",
+        "-map", "[out]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene1.mp4"
+    ], check=True)
+
+    # Render Scene 2 with Overlay (3.0s)
+    subprocess.run([
+        "ffmpeg", "-y", "-t", "3.0", "-i", "clip2.mp4", "-i", "overlay2.png",
+        "-filter_complex", "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920[v0];[v0][1:v]overlay=0:0[out]",
+        "-map", "[out]", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene2.mp4"
+    ], check=True)
+
+    # Render Scene 3 CTA (2.0s)
+    subprocess.run([
+        "ffmpeg", "-y", "-loop", "1", "-t", "2.0", "-i", "cta_slide.png",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene3.mp4"
+    ], check=True)
+
+    # Concat scenes + mux high-energy beat (Total 8.0s)
+    with open("concat_list.txt", "w") as f:
+        f.write("file 'scene1.mp4'\n")
+        f.write("file 'scene2.mp4'\n")
+        f.write("file 'scene3.mp4'\n")
+
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "concat_list.txt",
         "-i", "bg_audio.mp3",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+        "-c:v", "copy",
         "-c:a", "aac", "-b:a", "192k",
-        "-filter_complex", f"[1:a]afade=t=out:st={total_duration - 1.0}:d=1.0[aout]",
+        "-filter_complex", "[1:a]afade=t=out:st=6.8:d=1.2[aout]",
         "-map", "0:v", "-map", "[aout]",
-        "-t", str(total_duration),
-        "-vf", "scale=1080:1920",
+        "-t", "8.0",
         output_mp4
-    ]
-    subprocess.run(cmd, check=True)
+    ], check=True)
+
     return output_mp4
 
 # --- PUBLISHING ENGINE ---
@@ -334,27 +293,21 @@ def publish_content(video_url, caption):
         print(f"Story Publish Result: {s_pub}")
 
 if __name__ == "__main__":
-    reel = random.choice(VIRAL_NEWS_REELS)
-    print(f"Generating Precision Studio Reel: {reel['headline_line1']} {reel['headline_line2']}")
+    news = fetch_latest_pokemon_news()
+    video_pkg = random.choice(REAL_NEWS_VIDEOS)
 
-    make_viral_hook_frame(reel, "f1_hook.png")
-    make_graph_frame(reel, "f2_graph.png")
-    make_cta_frame("f3_cta.png")
+    print(f"Producing Video News Reel: {news['line1']} {news['line2']}")
+    mp4_file = compile_news_reel(news, video_pkg, "pokepulse_reel.mp4")
 
-    frames = ["f1_hook.png", "f2_graph.png", "f3_cta.png"]
-
-    print("Compiling Snappy Video...")
-    mp4_file = build_snappy_reel(frames, "pokepulse_reel.mp4")
-
-    print("Uploading to Cloudinary...")
+    print("Uploading to Cloudinary CDN...")
     upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
     video_cdn_url = upload_res.get("secure_url")
     print(f"CDN URL: {video_cdn_url}")
 
     caption = (
-        f"🚨 {reel['alert']} | {reel['headline_line1']} {reel['headline_line2']} {reel['headline_line3']}\n\n"
-        f"{reel['story_sub']}\n\n"
-        f"Are you picking up vintage grails or sticking to modern? Drop your thoughts below! 👇\n\n"
+        f"🚨 {news['alert']} | {news['line1']} {news['line2']} {news['line3']}\n\n"
+        f"Full Scoop: {news['context']}\n\n"
+        f"What are your thoughts on this latest update? Drop your comments below! 👇\n\n"
         f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
         f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
     )
