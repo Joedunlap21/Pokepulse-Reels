@@ -1,98 +1,49 @@
 import os
 import random
 import time
+import subprocess
 import cloudinary
 import cloudinary.uploader
+import requests
+from PIL import Image, ImageDraw, ImageFont
 
-# Cloudinary configuration from GitHub Secrets
+# Cloudinary Setup from GitHub Secrets
 cloudinary.config(
     cloudinary_url=os.getenv("CLOUDINARY_URL")
 )
 
-from PIL import Image, ImageDraw, ImageFont
-import requests
+API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse Reels Agent)"}
 
-API_HEADERS = {"User-Agent": "Mozilla/5.0 (CardStax/PokePulse News Agent)"}
+# High-Energy Royalty-Free Audio Tracks (Hype Trap / Upbeat Synth)
+HYPE_AUDIO_TRACKS = [
+    "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",  # Upbeat Action Trap Beat
+    "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",  # Energetic Electronic Hype
+    "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f77c30.mp3"   # Modern Hip Hop / Trap Beat
+]
 
-# --- VIRAL BREAKING NEWS STORIES VAULT ---
-# Each story: Tag, Headline, Subtitle, Hero Image URL, Slide 2 Content, Slide 3 Content
-VIRAL_NEWS_STORIES = [
+# High-Hype Pokémon Cards for Viral Reels
+REEL_TOPICS = [
     {
-        "tag": "MARKET ALERT",
-        "headline": "PRISMATIC EVOLUTIONS CHAOS",
-        "subtitle": "PRE-ORDERS SELL OUT IN SECONDS ACROSS ALL RETAILERS",
-        "hero_img": "https://images.pokemontcg.io/sv8pt5/161_hires.png",  # Eevee / Prismatic highlight
-        "slide2": {
-            "title": "WHAT JUST HAPPENED?",
-            "bullets": [
-                "Allocations slashed by up to 60% for local game stores nationwide.",
-                "Bots swept major retail drops within 15 seconds of launch.",
-                "Booster bundles and ETBs are already hitting 2.5x MSRP on secondary markets.",
-                "Collectors are comparing this frenzy to the peak of 2021 Evolving Skies."
-            ]
-        },
-        "slide3": {
-            "title": "MARKET IMPACT & FORECAST",
-            "bullets": [
-                "Expect extreme opening week volatility before reprint waves arrive.",
-                "Graded Eeveelution SIRs projected to open at record-breaking modern highs.",
-                "Market sentiment: DO NOT pay 3x scalper prices during release week.",
-                "Follow PokéPulse for real-time restock pings and live floor alerts."
-            ]
-        }
+        "hook": "THE MOST EXPENSIVE MODERN CARDS",
+        "subhook": "HOLD OR SELL IN 2026?",
+        "cards": [
+            {"name": "UMBREON VMAX ALT ART", "set": "Evolving Skies", "price": "850.00 USD", "img": "https://images.pokemontcg.io/swsh7/215_hires.png"},
+            {"name": "GIRATINA V ALT ART", "set": "Lost Origin", "price": "395.00 USD", "img": "https://images.pokemontcg.io/swsh11/186_hires.png"},
+            {"name": "PIKACHU EX SIR", "set": "Surging Sparks", "price": "380.00 USD", "img": "https://images.pokemontcg.io/sv8/238_hires.png"}
+        ]
     },
     {
-        "tag": "AUCTION RECORD",
-        "headline": "MOONBREON HITS ALL-TIME HIGH",
-        "subtitle": "PSA 10 SHATTERS CEILING AS RAW SUPPLY DISAPPEARS",
-        "hero_img": "https://images.pokemontcg.io/swsh7/215_hires.png",
-        "slide2": {
-            "title": "THE NUMBERS DON'T LIE",
-            "bullets": [
-                "PSA 10 copies just closed over 1,400 USD across multiple verified auction houses.",
-                "Raw copies in mint condition are virtually extinct under 800 USD.",
-                "Evolving Skies sealed booster boxes officially crossing 750 USD per box.",
-                "Population growth in PSA 10 has slowed significantly due to harsh grading."
-            ]
-        },
-        "slide3": {
-            "title": "BUY, SELL, OR HOLD?",
-            "bullets": [
-                "Modern grail status is now firmly cemented alongside Gold Stars.",
-                "Short term: Price consolidation likely after this aggressive breakout.",
-                "Long term: The definitive face card of the entire Sword & Shield era.",
-                "Recommendation: Hold PSA 10s; take profits only if pivoting to vintage."
-            ]
-        }
-    },
-    {
-        "tag": "BREAKING NEWS",
-        "headline": "TEAM ROCKET EXPANSION LEAKED",
-        "subtitle": "DARK POKEMON RETURN IN UPCOMING 2026 SPECIAL SET",
-        "hero_img": "https://images.pokemontcg.io/sv8/238_hires.png",
-        "slide2": {
-            "title": "LEAK DETAILS CONFIRMED",
-            "bullets": [
-                "Trademark filings in Japan reveal 'The Glory of Team Rocket'.",
-                "Dark Charizard and Dark Mewtwo Special Illustration Rares rumored.",
-                "First main-series Dark Pokémon mechanic introduced in over a decade.",
-                "Expected release schedule targets early fall international rollout."
-            ]
-        },
-        "slide3": {
-            "title": "COLLECTOR REACTION",
-            "bullets": [
-                "Nostalgia premium: Original Team Rocket (2000) vintage holos surging.",
-                "Rocket's Mewtwo and Dark Dragonite seeing immediate market pickups.",
-                "Anticipated to be the single most printed and hoarded set of the year.",
-                "Full breakdown drops in this Sunday's PokéPulse Market Report."
-            ]
-        }
+        "hook": "POKÉMON CARDS EXPLODING IN VALUE",
+        "subhook": "RECENT 30-DAY SALES SURGE",
+        "cards": [
+            {"name": "CHARIZARD EX SIR", "set": "151 Special Set", "price": "210.00 USD", "img": "https://images.pokemontcg.io/sv3pt5/199_hires.png"},
+            {"name": "TERAPAGOS EX SIR", "set": "Stellar Crown", "price": "145.00 USD", "img": "https://images.pokemontcg.io/sv7/170_hires.png"},
+            {"name": "MAGIKARP IR", "set": "Paldea Evolved", "price": "135.00 USD", "img": "https://images.pokemontcg.io/sv2/203_hires.png"}
+        ]
     }
 ]
 
-
-# --- AUTO-FIT FONT ENGINE ---
+# --- TYPOGRAPHY & AUTO-FIT ---
 def get_font(size, bold=False):
     paths = [
         "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -107,7 +58,7 @@ def get_font(size, bold=False):
                 continue
     return ImageFont.load_default()
 
-def draw_autofit_text(draw, text, box, max_font_size=80, min_font_size=18, fill="white", bold=True, align="center"):
+def draw_autofit_text(draw, text, box, max_font_size=80, min_font_size=20, fill="white", bold=True, align="center"):
     x1, y1, x2, y2 = box
     max_w = x2 - x1
     max_h = y2 - y1
@@ -139,197 +90,192 @@ def draw_autofit_text(draw, text, box, max_font_size=80, min_font_size=18, fill=
     draw.text((x, y), text, fill=fill, font=font)
     return font
 
+# --- 9:16 VERTICAL FRAME GENERATORS (1080x1920) ---
+W, H = 1080, 1920
 
-# --- SLIDE BUILDERS (NEWS CAROUSEL) ---
-
-def make_news_cover_slide(story, hero_img_path, output_path="slide_1_cover.jpg"):
-    """Slide 1: High-impact Viral Clickbait Cover."""
-    W, H = 1080, 1350
+def make_intro_frame(topic, out_path="frame_intro.png"):
     img = Image.new("RGB", (W, H), (10, 12, 16))
     draw = ImageDraw.Draw(img)
 
-    # Red Alert Pill
-    pill_w, pill_h = 440, 56
+    # Red Pill Hook
+    pill_w, pill_h = 480, 70
     pill_x1 = (W - pill_w) // 2
-    draw.rounded_rectangle([pill_x1, 70, pill_x1 + pill_w, 70 + pill_h], radius=28, fill="#E50914")
-    draw_autofit_text(draw, story["tag"], (pill_x1, 70, pill_x1 + pill_w, 70 + pill_h), max_font_size=32, min_font_size=20, fill="#FFFFFF", bold=True)
+    draw.rounded_rectangle([pill_x1, 280, pill_x1 + pill_w, 280 + pill_h], radius=35, fill="#E50914")
+    draw_autofit_text(draw, "MARKET WATCH 2026", (pill_x1, 280, pill_x1 + pill_w, 280 + pill_h), max_font_size=34, min_font_size=22, fill="#FFFFFF", bold=True)
 
-    # Big Headline
-    draw_autofit_text(draw, story["headline"].upper(), (50, 145, W - 50, 260), max_font_size=82, min_font_size=36, fill="#FFE600", bold=True)
+    # Big Hook Headline
+    draw_autofit_text(draw, topic["hook"], (60, 420, W - 60, 680), max_font_size=88, min_font_size=40, fill="#FFE600", bold=True)
+    draw_autofit_text(draw, topic["subhook"], (60, 720, W - 60, 820), max_font_size=42, min_font_size=24, fill="#00FF66", bold=True)
 
-    # Subtitle Bar
-    draw_autofit_text(draw, story["subtitle"], (50, 270, W - 50, 325), max_font_size=28, min_font_size=18, fill="#00FF66", bold=True)
+    # Branding
+    draw_autofit_text(draw, "@CARD.STAX", (60, 1600, W - 60, 1680), max_font_size=48, min_font_size=28, fill="#A0AEC0", bold=True)
+    img.save(out_path)
 
-    # Hero Visual
-    if os.path.exists(hero_img_path):
-        card = Image.open(hero_img_path).convert("RGBA")
-        card.thumbnail((660, 750), Image.Resampling.LANCZOS)
-        cw, ch = card.size
-        cx = (W - cw) // 2
-        cy = 360
-        draw.rounded_rectangle([cx - 10, cy - 6, cx + cw + 10, cy + ch + 14], radius=20, fill=(0, 0, 0))
-        img.paste(card, (cx, cy), mask=card.split()[3])
-
-    # Bottom Callout / Branding
-    draw.line([(50, 1180), (W - 50, 1180)], fill="#2D3748", width=2)
-    draw_autofit_text(draw, "@CARD.STAX", (50, 1205, 400, 1270), max_font_size=32, min_font_size=20, fill="#A0AEC0", bold=True, align="left")
-    draw_autofit_text(draw, "SWIPE TO READ 👉", (W - 400, 1205, W - 50, 1270), max_font_size=32, min_font_size=20, fill="#FFE600", bold=True, align="right")
-
-    img.save(output_path, quality=95)
-
-
-def make_news_info_slide(story_headline, slide_info, slide_num, output_path):
-    """Slides 2 & 3: Deep-dive News Breakdown with Clean Bullet Cards."""
-    W, H = 1080, 1350
+def make_card_frame(card_data, rank, out_path):
     img = Image.new("RGB", (W, H), (10, 12, 16))
     draw = ImageDraw.Draw(img)
 
-    # Top Tag
-    pill_w, pill_h = 320, 52
-    draw.rounded_rectangle([60, 60, 60 + pill_w, 60 + pill_h], radius=26, fill="#E50914")
-    draw_autofit_text(draw, f"REPORT PART {slide_num - 1}", (60, 60, 60 + pill_w, 60 + pill_h), max_font_size=28, min_font_size=18, fill="#FFFFFF", bold=True)
+    # Top Alert
+    pill_w, pill_h = 360, 64
+    pill_x1 = (W - pill_w) // 2
+    draw.rounded_rectangle([pill_x1, 140, pill_x1 + pill_w, 140 + pill_h], radius=32, fill="#E50914")
+    draw_autofit_text(draw, f"TOP HIT #{rank}", (pill_x1, 140, pill_x1 + pill_w, 140 + pill_h), max_font_size=32, min_font_size=22, fill="#FFFFFF", bold=True)
 
-    # Slide Section Title
-    draw_autofit_text(draw, slide_info["title"].upper(), (60, 135, W - 60, 215), max_font_size=56, min_font_size=28, fill="#FFE600", bold=True, align="left")
+    # Card Name
+    draw_autofit_text(draw, card_data["name"], (60, 230, W - 60, 340), max_font_size=68, min_font_size=36, fill="#FFE600", bold=True)
 
-    # Clean Content Cards for Bullets
-    bullets = slide_info.get("bullets", [])
-    start_y = 240
-    card_gap = 20
-    available_h = 900
-    card_h = (available_h - (len(bullets) - 1) * card_gap) // len(bullets)
+    # Card Visual
+    img_data = requests.get(card_data["img"], headers=API_HEADERS).content
+    with open("temp_card.png", "wb") as f:
+        f.write(img_data)
 
-    for i, b_text in enumerate(bullets):
-        y1 = start_y + i * (card_h + card_gap)
-        y2 = y1 + card_h
-        
-        # Dark Card Box
-        draw.rounded_rectangle([60, y1, W - 60, y2], radius=16, fill="#161B22", outline="#30363D", width=2)
+    card = Image.open("temp_card.png").convert("RGBA")
+    card.thumbnail((720, 960), Image.Resampling.LANCZOS)
+    cw, ch = card.size
+    cx = (W - cw) // 2
+    cy = 380
 
-        # Neon Accent Pill
-        draw.rounded_rectangle([80, y1 + 25, 92, y2 - 25], radius=6, fill="#00FF66")
+    draw.rounded_rectangle([cx - 12, cy - 6, cx + cw + 12, cy + ch + 14], radius=24, fill=(0, 0, 0))
+    img.paste(card, (cx, cy), mask=card.split()[3])
 
-        # Auto-fit Bullet Prose
-        draw_autofit_text(draw, b_text, (110, y1 + 15, W - 90, y2 - 15), max_font_size=32, min_font_size=18, fill="#FFFFFF", bold=False, align="left")
+    # Price Box
+    box_w, box_h = 800, 180
+    bx1 = (W - box_w) // 2
+    by1 = 1420
+    draw.rounded_rectangle([bx1, by1, bx1 + box_w, by1 + box_h], radius=24, fill="#161B22", outline="#00FF66", width=4)
+    draw_autofit_text(draw, f"VERIFIED MARKET FLOOR: {card_data['price']}", (bx1 + 20, by1 + 20, bx1 + box_w - 20, by1 + 100), max_font_size=42, min_font_size=24, fill="#FFFFFF", bold=True)
+    draw_autofit_text(draw, f"SET: {card_data['set'].upper()}", (bx1 + 20, by1 + 105, bx1 + box_w - 20, by1 + 160), max_font_size=32, min_font_size=20, fill="#A0AEC0", bold=True)
 
-    # Bottom Branding & Swipe
-    draw.line([(60, 1180), (W - 60, 1180)], fill="#2D3748", width=2)
-    draw_autofit_text(draw, "@CARD.STAX", (60, 1205, 400, 1270), max_font_size=32, min_font_size=20, fill="#A0AEC0", bold=True, align="left")
-    
-    next_text = "SWIPE NEXT 👉" if slide_num == 2 else "FINAL SLIDE 👉"
-    draw_autofit_text(draw, next_text, (W - 400, 1205, W - 60, 1270), max_font_size=32, min_font_size=20, fill="#FFE600", bold=True, align="right")
+    # Footer
+    draw_autofit_text(draw, "@CARD.STAX", (60, 1720, W - 60, 1800), max_font_size=44, min_font_size=26, fill="#A0AEC0", bold=True)
+    img.save(out_path)
 
-    img.save(output_path, quality=95)
+def make_cta_frame(out_path="frame_cta.png"):
+    cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
+    cdata = requests.get(cta_url, headers=API_HEADERS).content
+    with open("raw_cta.png", "wb") as f:
+        f.write(cdata)
 
+    base = Image.new("RGB", (W, H), (10, 12, 16))
+    cta_img = Image.open("raw_cta.png").convert("RGB")
+    cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
+    cw, ch = cta_img.size
+    cx = (W - cw) // 2
+    cy = (H - ch) // 2
+    base.paste(cta_img, (cx, cy))
 
-# --- UPLOAD & INSTAGRAM PUBLISHING ---
-def upload_to_cdn(file_path):
-    try:
-        res = cloudinary.uploader.upload(file_path, folder="pokepulse_news")
-        return res.get("secure_url")
-    except Exception as e:
-        print(f"Cloudinary upload error: {e}")
-        return None
+    draw = ImageDraw.Draw(base)
+    draw_autofit_text(draw, "TAP LINK IN BIO TO SUBSCRIBE FREE", (60, 1680, W - 60, 1780), max_font_size=42, min_font_size=22, fill="#FFE600", bold=True)
+    base.save(out_path)
 
-def post_carousel(image_urls, caption):
+# --- VIDEO RENDERING VIA FFMPEG WITH AUDIO MUXING ---
+def build_reel_mp4(frame_files, output_mp4="pokepulse_reel.mp4"):
+    durations = [2.5, 3.0, 3.0, 3.0, 3.0]  # Total = 14.5 seconds
+    total_duration = sum(durations)
+
+    with open("playlist.txt", "w") as f:
+        for frame, dur in zip(frame_files, durations):
+            f.write(f"file '{frame}'\n")
+            f.write(f"duration {dur}\n")
+        f.write(f"file '{frame_files[-1]}'\n")
+
+    # Download a random hype audio track
+    audio_url = random.choice(HYPE_AUDIO_TRACKS)
+    print(f"Downloading high-energy audio track: {audio_url}")
+    audio_data = requests.get(audio_url, headers=API_HEADERS).content
+    with open("bg_audio.mp3", "wb") as f:
+        f.write(audio_data)
+
+    # Concat frames + mux audio, trim audio to exact video length, add 1.5s audio fadeout
+    cmd = [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0", "-i", "playlist.txt",
+        "-i", "bg_audio.mp3",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+        "-c:a", "aac", "-b:a", "192k",
+        "-filter_complex", f"[1:a]afade=t=out:st={total_duration - 1.5}:d=1.5[aout]",
+        "-map", "0:v", "-map", "[aout]",
+        "-t", str(total_duration),
+        "-vf", "scale=1080:1920",
+        output_mp4
+    ]
+    subprocess.run(cmd, check=True)
+    return output_mp4
+
+# --- INSTAGRAM REELS PUBLISHING ---
+def publish_to_reels(video_url, caption):
     ig_user_id = os.getenv("IG_USER_ID")
     access_token = os.getenv("IG_ACCESS_TOKEN")
-    if not ig_user_id or not access_token:
-        print("Error: Missing IG_USER_ID or IG_ACCESS_TOKEN.")
-        return
 
-    print("Step 1: Uploading carousel item containers...")
-    item_ids = []
-    for u in image_urls:
-        r = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media", data={
-            "image_url": u,
-            "is_carousel_item": "true",
-            "access_token": access_token
-        }).json()
-        if "id" in r:
-            item_ids.append(r["id"])
-        else:
-            print("Error creating item container:", r)
-        time.sleep(2)
-
-    if len(item_ids) != len(image_urls):
-        print(f"Aborted: expected {len(image_urls)} items, created {len(item_ids)}")
-        return
-
-    print("Step 2: Creating carousel container...")
-    c_res = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media", data={
-        "media_type": "CAROUSEL",
+    print("Step 1: Initializing Reels container with audio...")
+    res = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media", data={
+        "media_type": "REELS",
+        "video_url": video_url,
         "caption": caption,
-        "children": ",".join(item_ids),
         "access_token": access_token
     }).json()
 
-    if "id" not in c_res:
-        print("Error creating carousel container:", c_res)
+    if "id" not in res:
+        print("Error initializing Reel:", res)
         return
 
-    time.sleep(10)
+    container_id = res["id"]
+    print(f"Reel Container ID: {container_id}. Waiting for Instagram video processing...")
 
-    print("Step 3: Publishing live to Instagram...")
-    pub_res = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media_publish", data={
-        "creation_id": c_res["id"],
+    for _ in range(15):
+        time.sleep(10)
+        status = requests.get(f"https://graph.facebook.com/v21.0/{container_id}?fields=status_code&access_token={access_token}").json()
+        print(f"Processing status: {status.get('status_code')}")
+        if status.get("status_code") == "FINISHED":
+            break
+        elif status.get("status_code") == "ERROR":
+            print("Video encoding failed on Instagram's end.")
+            return
+
+    print("Step 2: Publishing Reel...")
+    pub = requests.post(f"https://graph.facebook.com/v21.0/{ig_user_id}/media_publish", data={
+        "creation_id": container_id,
         "access_token": access_token
     }).json()
 
-    if "id" in pub_res:
-        print(f"Success! Carousel live on @card.stax: {pub_res['id']}")
+    if "id" in pub:
+        print(f"Success! Reel with Hype Audio is LIVE on @card.stax: {pub['id']}")
     else:
-        print("Publishing error:", pub_res)
+        print("Publishing error:", pub)
 
-
-# --- MAIN PIPELINE ---
+# --- MAIN EXECUTION ---
 if __name__ == "__main__":
-    # Pick a viral news story
-    story = random.choice(VIRAL_NEWS_STORIES)
-    print(f"Generating News Carousel: {story['headline']}")
+    topic = random.choice(REEL_TOPICS)
+    print(f"Creating Reel for: {topic['hook']}")
 
-    # 1. Slide 1 (Viral Cover)
-    hero_local = "hero_news.png"
-    h_data = requests.get(story["hero_img"], headers=API_HEADERS).content
-    with open(hero_local, "wb") as f:
-        f.write(h_data)
-    make_news_cover_slide(story, hero_local, "slide_1_cover.jpg")
+    # Frame 1: Hook
+    make_intro_frame(topic, "f1_intro.png")
 
-    # 2. Slide 2 (Part 1: What Happened)
-    make_news_info_slide(story["headline"], story["slide2"], 2, "slide_2_info.jpg")
+    # Frames 2, 3, 4: Top 3 Cards
+    frames = ["f1_intro.png"]
+    for idx, card in enumerate(topic["cards"], start=1):
+        fpath = f"f_{idx}_card.png"
+        make_card_frame(card, idx, fpath)
+        frames.append(fpath)
 
-    # 3. Slide 3 (Part 2: Market Impact)
-    make_news_info_slide(story["headline"], story["slide3"], 3, "slide_3_impact.jpg")
+    # Frame 5: Outro Newsletter CTA
+    make_cta_frame("f5_cta.png")
+    frames.append("f5_cta.png")
 
-    # 4. Slide 4 (Final Custom Newsletter Graphic)
-    newsletter_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
-    n_data = requests.get(newsletter_url, headers=API_HEADERS).content
-    with open("slide_4_newsletter.png", "wb") as f:
-        f.write(n_data)
+    print("Compiling 9:16 Reel with Audio...")
+    mp4_file = build_reel_mp4(frames, "pokepulse_reel.mp4")
 
-    slide_files = [
-        "slide_1_cover.jpg",
-        "slide_2_info.jpg",
-        "slide_3_impact.jpg",
-        "slide_4_newsletter.png"
-    ]
-
-    print("Uploading 4 news slides to Cloudinary...")
-    urls = []
-    for sf in slide_files:
-        u = upload_to_cdn(sf)
-        if u:
-            urls.append(u)
+    print("Uploading MP4 to Cloudinary CDN...")
+    upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
+    video_cdn_url = upload_res.get("secure_url")
+    print(f"CDN URL: {video_cdn_url}")
 
     caption = (
-        f"🚨 POKÉPULSE MARKET ALERT | {story['headline']} 🚨\n\n"
-        f"{story['subtitle']}\n\n"
-        f"Swipe through for the full breakdown and collector forecast! 👉\n\n"
-        f"📬 Never miss breaking market moves—join the free PokéPulse Newsletter (Link in bio!)\n\n"
-        f"#PokemonCards #PokemonTCG #CardStax #PokePulse #PokemonNews"
+        f"🔥 {topic['hook']} 🔥\n\n"
+        f"{topic['subhook']}\n\n"
+        f"Which card are you holding long term? Drop your pick below! 👇\n\n"
+        f"📬 Free Weekly Pokémon Market Reports -> Link in Bio!\n\n"
+        f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse"
     )
 
-    if len(urls) == 4:
-        post_carousel(urls, caption)
-    else:
-        print(f"Error: expected 4 slides, only uploaded {len(urls)}.")
+    publish_to_reels(video_cdn_url, caption)
