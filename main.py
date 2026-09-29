@@ -272,4 +272,3 @@ def publish_to_reels_and_story(video_url, caption):
             print("Publishing Story error:", story_pub)
     else:
         print("Error initializing Story:", story_res)
-            publish_to_reels_and_story(video_cdn_url, caption)
