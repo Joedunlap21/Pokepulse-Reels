@@ -6,7 +6,6 @@ import cloudinary
 import cloudinary.uploader
 import requests
 import xml.etree.ElementTree as ET
-from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
 
 cloudinary.config(cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip())
@@ -40,7 +39,7 @@ def get_font(size):
         return ImageFont.load_default()
 
 def fetch_live_article():
-    """Fetches the latest breaking article and extracts the actual photos from the article itself."""
+    """Fetches breaking Pokémon article and extracts authentic card/product images using built-in regex."""
     posted_log = "posted_news.txt"
     posted = set()
     if os.path.exists(posted_log):
@@ -65,32 +64,23 @@ def fetch_live_article():
                 title = item.find("title").text.strip() if item.find("title") is not None else "BREAKING POKÉMON NEWS"
                 desc = item.find("description").text if item.find("description") is not None else ""
 
-                # Scrape article body to grab ACTUAL real card / product images
                 article_images = []
                 try:
                     art_page = requests.get(link, headers=API_HEADERS, timeout=10)
-                    soup = BeautifulSoup(art_page.text, "html.parser")
-                    for img in soup.find_all("img"):
-                        src = img.get("src") or img.get("data-src")
-                        if src and re.search(r'\.(png|jpg|jpeg)', src, re.I):
-                            # Filter out tracking pixels / tiny icons
-                            if not any(x in src.lower() for x in ["icon", "logo", "avatar", "gravatar", "banner"]):
-                                if src.startswith("//"):
-                                    src = "https:" + src
-                                elif src.startswith("/"):
-                                    src = source["rss"].split("/")[0] + "//" + source["rss"].split("/")[2] + src
-                                if src not in article_images:
-                                    article_images.append(src)
+                    # Extract high-res card/product image URLs via regex (zero external dependencies)
+                    matches = re.findall(r'<img[^>]+(?:src|data-src)=["\'](https?://[^"\']+\.(?:png|jpg|jpeg))["\']', art_page.text, re.I)
+                    for src in matches:
+                        if not any(x in src.lower() for x in ["icon", "logo", "avatar", "gravatar", "banner", "emoji"]):
+                            if src not in article_images:
+                                article_images.append(src)
                 except Exception:
                     pass
 
-                # If no article images scraped, extract from description
                 if not article_images:
                     for src in re.findall(r'src=["\'](https?://[^"\']+\.(?:png|jpg|jpeg))["\']', desc, re.I):
                         if not any(x in src.lower() for x in ["icon", "logo", "avatar"]):
                             article_images.append(src)
 
-                # Record article as used
                 with open(posted_log, "a") as f:
                     f.write(link + "\n")
 
@@ -107,7 +97,6 @@ def fetch_live_article():
             print(f"Error checking {source['name']}: {e}")
             continue
 
-    # Fallback if no new RSS item
     return {
         "source": "POKEBEACH",
         "badge": "BREAKING NEWS",
@@ -137,18 +126,14 @@ def draw_autofit_text(draw, text, y, max_w=980, target_size=155, min_size=55, fi
     return y + h + 8
 
 def render_card_ladder_slide(img_url, badge_text, line1, line2, line3, out_path):
-    """Renders the authentic Card Ladder / Auction Alert viral aesthetic."""
     base = Image.new("RGB", (W, H), (10, 10, 14))
     draw = ImageDraw.Draw(base)
 
-    # Download actual news photo
     try:
         r = requests.get(img_url, headers=API_HEADERS, timeout=10)
         with open("temp_news_img.png", "wb") as f:
             f.write(r.content)
         card_raw = Image.open("temp_news_img.png").convert("RGB")
-        
-        # Scale cleanly to top hero area (Card Ladder look)
         card_raw.thumbnail((1020, 1150), Image.Resampling.LANCZOS)
         cw, ch = card_raw.size
         base.paste(card_raw, ((W - cw) // 2, 60))
@@ -168,7 +153,6 @@ def render_card_ladder_slide(img_url, badge_text, line1, line2, line3, out_path)
     ax = (W - aw) // 2
     ay = 1140
 
-    # Drop shadow + pill
     draw.rounded_rectangle([ax + 3, ay + 4, ax + aw + 3, ay + ah + 4], radius=6, fill="#000000")
     draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=4, fill="#E50914")
     draw.text((ax + 28, ay + 6), badge_text, font=a_font, fill="#FFFFFF")
@@ -201,11 +185,30 @@ def make_cta_slide(out_path="f_cta.png"):
     draw.text(((W - (c_box[2] - c_box[0])) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
+def get_upbeat_pokemon_audio(duration):
+    """Generates an upbeat energetic 8-bit adventure arpeggio."""
+    audio_path = "pokemon_beat.mp3"
+    cmd = [
+        "ffmpeg", "-y", "-f", "lavfi",
+        "-i", f"aevalsrc=sin(880*2*PI*t)*0.2*lt(mod(t*4,1),0.4)+sin(1174.66*2*PI*t)*0.25*between(mod(t*4,1),0.1,0.5)+sin(1318.51*2*PI*t)*0.2*between(mod(t*4,1),0.2,0.6)+sin(1760*2*PI*t)*0.15*between(mod(t*4,1),0.3,0.7):s=44100:d={duration}",
+        "-c:a", "libmp3lame", "-b:a", "192k",
+        audio_path
+    ]
+    try:
+        subprocess.run(cmd, check=True)
+        return audio_path
+    except Exception:
+        subprocess.run([
+            "ffmpeg", "-y", "-f", "lavfi",
+            f"-i", f"sine=frequency=440:duration={duration}",
+            "-c:a", "libmp3lame", audio_path
+        ], check=True)
+        return audio_path
+
 def build_reel_and_publish():
     article = fetch_live_article()
     print(f"Building Reel for: {article['title']}")
 
-    # Use actual article images
     imgs = article["images"]
     img1 = imgs[0] if len(imgs) > 0 else "https://images.pokemontcg.io/col1/22_hires.png"
     img2 = imgs[1] if len(imgs) > 1 else img1
@@ -222,13 +225,12 @@ def build_reel_and_publish():
     # Scene 2: Official Source & Details
     render_card_ladder_slide(img2, article["source"], "OFFICIAL RELEASE", "DETAILS CONFIRMED", "FULL BREAKDOWN BELOW", "s2.png")
 
-    # Scene 3: Market/Collector Impact
+    # Scene 3: Market Impact
     render_card_ladder_slide(img3, "MARKET IMPACT", "CHASE CARD REVEAL", "PRICES & RESTOCKS", "CHECK CAPTION", "s3.png")
 
     # Scene 4: PokéPulse CTA Slide
     make_cta_slide("s4.png")
 
-    # Render video clips with 0% memory crash
     subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "s1.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v1.mp4"], check=True)
     subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "s2.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v2.mp4"], check=True)
     subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "s3.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v3.mp4"], check=True)
@@ -237,12 +239,20 @@ def build_reel_and_publish():
     with open("concat.txt", "w") as f:
         f.write("file 'v1.mp4'\nfile 'v2.mp4'\nfile 'v3.mp4'\nfile 'v4.mp4'\n")
 
+    total_len = 12.4
+    audio_file = get_upbeat_pokemon_audio(total_len)
+
     final_mp4 = "live_pokepulse_reel.mp4"
+    fade_start = round(total_len - 1.2, 2)
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
-        "-f", "lavfi", "-i", "sine=frequency=130:duration=12.4",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
-        "-t", "12.4", final_mp4
+        "-i", audio_file,
+        "-c:v", "libx264", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k",
+        "-filter_complex", f"[1:a]afade=t=out:st={fade_start}:d=1.2[aout]",
+        "-map", "0:v", "-map", "[aout]",
+        "-t", str(total_len),
+        final_mp4
     ], check=True)
 
     print("Uploading to Cloudinary...")
