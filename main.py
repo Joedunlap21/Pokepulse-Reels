@@ -19,7 +19,6 @@ API_HEADERS = {
 }
 IG_USER_ID = "17841472317326348"
 
-# Tier-1 Reliable Pokémon News RSS Feeds
 NEWS_SOURCES = [
     {"name": "POKEBEACH", "rss": "https://www.pokebeach.com/feed", "badge": "BREAKING NEWS"},
     {"name": "POKEGUARDIAN", "rss": "https://www.pokeguardian.com/rss.xml", "badge": "SET REVEAL"}
@@ -72,36 +71,43 @@ def calculate_reading_duration(scene):
     calc_dur = 1.8 + (words * 0.28)
     return round(max(2.4, min(calc_dur, 4.2)), 2)
 
-def fetch_unique_topic_images(query_term):
-    clean_term = re.sub(r'[^a-zA-Z0-9\s]', '', query_term).strip()
-    words = [w for w in clean_term.split() if len(w) > 3 and w.lower() not in ["pokemon", "cards", "expansion", "revealed", "tcg", "official", "promo"]]
-    search_keyword = words[0] if words else "Pikachu"
-
-    url = f"https://api.pokemontcg.io/v2/cards?q=name:{search_keyword}*&pageSize=4"
-    images = []
+def scrape_exact_article_images(article_url, domain):
+    """Scrapes the real card scans and product images directly from inside the article body."""
+    found_images = []
     try:
-        res = requests.get(url, headers=API_HEADERS, timeout=8)
-        if res.status_code == 200:
-            data = res.json().get("data", [])
-            for card in data:
-                hi = card.get("images", {}).get("large") or card.get("images", {}).get("small")
-                if hi:
-                    images.append(hi)
-    except Exception:
-        pass
+        r = requests.get(article_url, headers=API_HEADERS, timeout=10)
+        if r.status_code != 200:
+            return []
+        
+        html = r.text
+        # Extract images specifically from content tags (avoiding avatars, banners, sidebars)
+        raw_imgs = re.findall(r'<img[^>]+(?:src|data-src|data-lazy-src)=["\']([^"\']+\.(?:png|jpg|jpeg))["\']', html, re.I)
+        
+        for img_src in raw_imgs:
+            img_src = img_src.strip()
+            # Clean protocol relative URLs
+            if img_src.startswith("//"):
+                img_src = "https:" + img_src
+            elif img_src.startswith("/"):
+                base = "https://www.pokebeach.com" if "pokebeach" in domain.lower() else "https://www.pokeguardian.com"
+                img_src = base + img_src
 
-    chase_pool = [
-        "https://images.pokemontcg.io/swsh7/215_hires.png",
-        "https://images.pokemontcg.io/col1/22_hires.png",
-        "https://images.pokemontcg.io/sv3pt5/199_hires.png",
-        "https://images.pokemontcg.io/swsh8/269_hires.png"
-    ]
-    for c in chase_pool:
-        if len(images) < 4 and c not in images:
-            images.append(c)
-    return images[:4]
+            # Filter out non-card images (logos, icons, gravatars, trackers)
+            lower = img_src.lower()
+            if any(ign in lower for ign in ["logo", "avatar", "gravatar", "icon", "banner", "button", "ads", "pixel", "facebook", "twitter", "footer"]):
+                continue
+
+            # Must be a substantive image
+            if img_src not in found_images:
+                found_images.append(img_src)
+
+    except Exception as e:
+        print(f"Error scraping article images from {article_url}: {e}")
+
+    return found_images
 
 def build_dynamic_story_from_live_news():
+    """Finds the latest live article that contains real, matching card/product photos."""
     posted_log = "posted_news.txt"
     posted = set()
     if os.path.exists(posted_log):
@@ -127,25 +133,25 @@ def build_dynamic_story_from_live_news():
                 desc = item.find("description").text if item.find("description") is not None else ""
                 clean_desc = re.sub(r'<[^>]+>', '', desc).strip()
 
-                article_images = []
-                try:
-                    art_page = requests.get(link, headers=API_HEADERS, timeout=8)
-                    matches = re.findall(r'<img[^>]+(?:src|data-src)=["\'](https?://[^"\']+\.(?:png|jpg|jpeg))["\']', art_page.text, re.I)
-                    for src in matches:
-                        if not any(x in src.lower() for x in ["icon", "logo", "avatar", "gravatar", "banner", "emoji"]):
-                            if src not in article_images:
-                                article_images.append(src)
-                except Exception:
-                    pass
+                print(f"Checking article: {raw_title}")
+                article_images = scrape_exact_article_images(link, source["name"])
+                
+                # Must have at least 1 authentic photo from the article
+                if not article_images:
+                    print(f"No direct card scans in {link}, checking next...")
+                    continue
 
-                if len(article_images) < 4:
-                    supplements = fetch_unique_topic_images(raw_title)
-                    for s in supplements:
-                        if s not in article_images:
-                            article_images.append(s)
-
+                # Record as posted
                 with open(posted_log, "a") as f:
                     f.write(link + "\n")
+
+                print(f"Successfully extracted {len(article_images)} photos from article: {article_images[:3]}")
+
+                # Distribute article images across scenes
+                img1 = article_images[0]
+                img2 = article_images[1] if len(article_images) > 1 else img1
+                img3 = article_images[2] if len(article_images) > 2 else img2
+                img4 = article_images[3] if len(article_images) > 3 else img1
 
                 words = raw_title.upper().split()
                 half = max(1, len(words) // 2)
@@ -157,7 +163,7 @@ def build_dynamic_story_from_live_news():
                     "scenes": [
                         {
                             "tag": source["badge"],
-                            "img_url": article_images[0],
+                            "img_url": img1,
                             "crop_mode": "center",
                             "line1": t1,
                             "line1_color": "#FFE600",
@@ -168,8 +174,8 @@ def build_dynamic_story_from_live_news():
                         },
                         {
                             "tag": source["name"],
-                            "img_url": article_images[1] if len(article_images) > 1 else article_images[0],
-                            "crop_mode": "art_box",
+                            "img_url": img2,
+                            "crop_mode": "center",
                             "line1": "OFFICIAL REVEAL",
                             "line1_color": "#FFE600",
                             "line2": "DETAILS CONFIRMED",
@@ -179,8 +185,8 @@ def build_dynamic_story_from_live_news():
                         },
                         {
                             "tag": "MARKET IMPACT",
-                            "img_url": article_images[2] if len(article_images) > 2 else article_images[0],
-                            "crop_mode": "slab_top",
+                            "img_url": img3,
+                            "crop_mode": "center",
                             "line1": "CHASE CARDS ALERT",
                             "line1_color": "#FFFFFF",
                             "line2": "PRICING & RESTOCKS",
@@ -190,7 +196,7 @@ def build_dynamic_story_from_live_news():
                         },
                         {
                             "tag": "POKEPULSE VERDICT",
-                            "img_url": article_images[3] if len(article_images) > 3 else article_images[0],
+                            "img_url": img4,
                             "crop_mode": "center",
                             "line1": "FULL BREAKDOWN",
                             "line1_color": "#FFE600",
@@ -214,67 +220,7 @@ def build_dynamic_story_from_live_news():
             print(f"Error checking {source['name']}: {e}")
             continue
 
-    chase_imgs = fetch_unique_topic_images("Pikachu Illustrator")
-    return {
-        "story_id": "illustrator_pikachu_record",
-        "scenes": [
-            {
-                "tag": "AUCTION RECORD",
-                "img_url": chase_imgs[0],
-                "crop_mode": "center",
-                "line1": "THE 5.27 MILLION USD",
-                "line1_color": "#FFE600",
-                "line2": "HOLY GRAIL PIKACHU",
-                "line2_color": "#FFFFFF",
-                "line3": "GUINNESS RECORD",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "1998 COROCORO",
-                "img_url": chase_imgs[1],
-                "crop_mode": "art_box",
-                "line1": "NEVER SOLD IN PACKS",
-                "line1_color": "#FFE600",
-                "line2": "DRAWN BY ATSUKO NISHIDA",
-                "line2_color": "#FFFFFF",
-                "line3": "ORIGINAL CREATOR",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "POP REPORT",
-                "img_url": chase_imgs[2],
-                "crop_mode": "slab_top",
-                "line1": "ONLY 39 COPIES AWARDED",
-                "line1_color": "#FFFFFF",
-                "line2": "EXACTLY ONE PSA 10",
-                "line2_color": "#FFE600",
-                "line3": "CONFIRMED IN EXISTENCE",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "AUCTION VERDICT",
-                "img_url": chase_imgs[3],
-                "crop_mode": "center",
-                "line1": "HIGHEST VALUED CARD",
-                "line1_color": "#FFE600",
-                "line2": "IN COLLECTING HISTORY",
-                "line2_color": "#FFFFFF",
-                "line3": "AN UNTOUCHABLE ICON",
-                "line3_color": "#00FF66"
-            }
-        ],
-        "caption_full": (
-            "🚨 AUCTION RECORD | THE 5.27 MILLION USD ILLUSTRATOR PIKACHU!\n\n"
-            "Facts Behind the Legend:\n"
-            "• Created in 1998 exclusively for 3 illustration contests in CoroCoro Comic.\n"
-            "• Drawn by Atsuko Nishida, the original creator of Pikachu.\n"
-            "• Only 39 official copies were awarded to winners worldwide.\n"
-            "• Certified by Guinness World Records as the most expensive Pokémon card ever sold at 5,275,000 USD.\n\n"
-            "Is Illustrator Pikachu the greatest collectible in modern history? Drop your thoughts below! 👇\n\n"
-            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-            "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
-        )
-    }
+    raise Exception("No fresh articles with scrapable card images found right now. Check back shortly!")
 
 def render_native_scene_slide(scene, out_path):
     img = Image.new("RGB", (W, H), (10, 10, 14))
@@ -285,25 +231,13 @@ def render_native_scene_slide(scene, out_path):
         with open("temp_raw.png", "wb") as f:
             f.write(pdata)
         raw = Image.open("temp_raw.png").convert("RGB")
-        iw, ih = raw.size
-
-        photo_h = 1200
-        if scene["crop_mode"] == "art_box":
-            crop_box = (int(iw * 0.08), int(ih * 0.12), int(iw * 0.92), int(ih * 0.65))
-            cropped = raw.crop(crop_box)
-            cropped = cropped.resize((W, photo_h), Image.Resampling.LANCZOS)
-            img.paste(cropped, (0, 0))
-        elif scene["crop_mode"] == "slab_top":
-            crop_box = (0, 0, iw, int(ih * 0.60))
-            cropped = raw.crop(crop_box)
-            cropped = cropped.resize((W, photo_h), Image.Resampling.LANCZOS)
-            img.paste(cropped, (0, 0))
-        else:
-            raw.thumbnail((1020, 1160), Image.Resampling.LANCZOS)
-            rw, rh = raw.size
-            img.paste(raw, ((W - rw) // 2, 20))
+        
+        # Fit image cleanly in top hero section (Card Ladder layout)
+        raw.thumbnail((1020, 1160), Image.Resampling.LANCZOS)
+        rw, rh = raw.size
+        img.paste(raw, ((W - rw) // 2, 40))
     except Exception as e:
-        print(f"Error loading image: {e}")
+        print(f"Error loading image {scene['img_url']}: {e}")
 
     # Gradient fade behind text
     for y in range(980, 1260):
@@ -391,17 +325,15 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
         for v in scene_vids:
             f.write(f"file '{v}'\n")
 
-    # Rotate through local audio folder if files exist
+    # Audio rotation from your audio/ folder
     audio_candidates = glob.glob("audio/*.mp3") + glob.glob("audio/*.wav") + glob.glob("*.mp3")
-    # Exclude system files
     audio_candidates = [f for f in audio_candidates if f not in ["bg_audio.mp3", "pokemon_beat.mp3"]]
 
     if audio_candidates:
         selected_audio = random.choice(audio_candidates)
-        print(f"Using selected soundtrack: {selected_audio}")
+        print(f"Using rotated soundtrack: {selected_audio}")
         audio_file = selected_audio
     else:
-        # High reliability uncompressed WAV fallback
         audio_file = "bg_audio.wav"
         subprocess.run([
             "ffmpeg", "-y", "-f", "lavfi",
