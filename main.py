@@ -16,23 +16,25 @@ API_HEADERS = {
 }
 IG_USER_ID = "17841472317326348"
 
-# High-Energy News Broadcast & Adventure Beats (Royalty-Free)
+# High-Energy Cinematic Soundtracks (Direct MP3 streams)
 BROADCAST_AUDIO_TRACKS = [
     "https://actions.google.com/sounds/v1/sports/cheering_crowd.ogg",
     "https://actions.google.com/sounds/v1/science_fiction/force_field_hum.ogg",
     "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
 ]
 
-# IN-DEPTH 5-PART DOCUMENTARY NEWS STORIES
-DOCUMENTARY_NEWS_STORIES = [
+# MULTI-PICTURE IN-DEPTH DOCUMENTARY STORIES (EACH REEL IS 100% ONE SUBJECT)
+LIVE_ACTION_STORIES = [
     {
-        "story_id": "zoroark_kindergarten_doc",
+        "story_id": "zoroark_kindergarten_mystery",
         "alert": "AUCTION ALERT",
         "scenes": [
             {
+                # SCENE 1: THE VISUAL HOOK
                 "tag": "AUCTION ALERT",
                 "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "zoom_type": "macro_art",
+                "crop_mode": "center",
+                "motion": "zoom_in",
                 "line1": "A KINDERGARTENER",
                 "line1_color": "#FFE600",
                 "line2": "DESIGNED THIS",
@@ -41,69 +43,79 @@ DOCUMENTARY_NEWS_STORIES = [
                 "line3_color": "#00FF66"
             },
             {
+                # SCENE 2: THE ORIGIN STORY (DIFFERENT IMAGE: ART CROP)
                 "tag": "ORIGIN STORY",
                 "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "zoom_type": "macro_crop",
-                "line1": "2010 CONTEST",
+                "crop_mode": "art_box",
+                "motion": "pan_right",
+                "line1": "IN 2010 JAPAN",
                 "line1_color": "#FFE600",
-                "line2": "MEGU TANIGUCHI",
+                "line2": "6-YEAR-OLD MEGU WON",
                 "line2_color": "#FFFFFF",
-                "line3": "ILLUSION'S ZORUA",
+                "line3": "OFFICIAL DESIGN CONTEST",
                 "line3_color": "#00FF66"
             },
             {
-                "tag": "HISTORIC ARTIFACT",
+                # SCENE 3: SCARCITY & PROOF (DIFFERENT IMAGE: SLAB LABEL)
+                "tag": "HISTORIC RARITY",
                 "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "zoom_type": "macro_slab",
-                "line1": "THE ONLY",
+                "crop_mode": "slab_top",
+                "motion": "zoom_in",
+                "line1": "COPIES GIVEN ONLY",
                 "line1_color": "#FFFFFF",
-                "line2": "BGS PRISTINE 10",
+                "line2": "TO CONTEST WINNERS",
                 "line2_color": "#FFE600",
-                "line3": "FROM ENTIRE CONTEST",
+                "line3": "LESS THAN 10 EXIST",
                 "line3_color": "#00FF66"
             },
             {
-                "tag": "AUCTION RECORD",
+                # SCENE 4: THE AUCTION CLIMAX
+                "tag": "AUCTION CLIMAX",
                 "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "zoom_type": "macro_slab",
+                "crop_mode": "center",
+                "motion": "pan_left",
                 "line1": "HAMMER DROPPED",
                 "line1_color": "#FFE600",
                 "line2": "AT $72,000 USD",
                 "line2_color": "#FFFFFF",
-                "line3": "1 OF 1 HOLY GRAIL",
+                "line3": "ONLY BGS 10 ON EARTH",
                 "line3_color": "#00FF66"
             }
         ],
         "caption_full": (
             "🚨 AUCTION ALERT | A KINDERGARTENER DESIGNED THIS $72,000+ CARD!\n\n"
-            "In 2010, the Pokémon Company hosted the legendary 'Ruler of Illusion Zoroark' design contest in Japan.\n\n"
-            "Six-year-old kindergarten winner Megu Taniguchi drew this charming Zorua riding in a bus alongside Pikachu. "
-            "Only winners received copies of their own cards, making this one of the rarest Pokémon artifacts on Earth.\n\n"
-            "This exact card was certified by Beckett as a Pristine 10—the only Pristine 10 from the entire contest—and just hammered at an all-time record of $72,000+ USD!\n\n"
-            "What would you pay for a true 1-of-1 piece of Pokémon history? Drop your thoughts below! 👇\n\n"
+            "In 2010, the Pokémon Company ran the legendary 'Ruler of Illusion Zoroark' design contest in Japan.\n\n"
+            "Megu Taniguchi, a kindergarten student, drew this delightful Zorua riding a red bus alongside Pikachu. "
+            "Her artwork won first place, and she was awarded official copies of her card.\n\n"
+            "With less than 10 copies known to exist worldwide, a pristine BGS 10 copy just crossed the auction block, hammering at an unbelievable $72,000+ USD!\n\n"
+            "What would you do if you owned this 1-of-1 grail? Drop your thoughts below! 👇\n\n"
             "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
             "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
         )
     },
     {
-        "story_id": "platinum_lvx_doc",
+        "story_id": "platinum_rayquaza_synthesis",
         "alert": "MARKET ALERT",
         "scenes": [
             {
-                "tag": "AUCTION ALERT",
+                # SCENE 1: THE HOOK
+                "tag": "MARKET ALERT",
                 "img_url": "https://images.pokemontcg.io/pl3/146_hires.png",
-                "zoom_type": "macro_slab",
-                "line1": "LV.X",
+                "crop_mode": "center",
+                "motion": "zoom_in",
+                "line1": "LV.X GRAILS",
                 "line1_color": "#00FF66",
-                "line2": "IS MOVING FAST.",
+                "line2": "ARE MOVING",
                 "line2_color": "#FFFFFF",
-                "line3": "",
-                "line3_color": ""
+                "line3": "INSANELY FAST.",
+                "line3_color": "#FFE600"
             },
             {
+                # SCENE 2: SUPPLY SHOCK
                 "tag": "SUPPLY SHOCK",
                 "img_url": "https://images.pokemontcg.io/pl3/146_hires.png",
-                "zoom_type": "macro_crop",
+                "crop_mode": "art_box",
+                "motion": "pan_right",
                 "line1": "SUPREME VICTORS",
                 "line1_color": "#FFE600",
                 "line2": "RAYQUAZA C LV.X",
@@ -112,92 +124,37 @@ DOCUMENTARY_NEWS_STORIES = [
                 "line3_color": "#00FF66"
             },
             {
-                "tag": "PRICE SQUEEZE",
+                # SCENE 3: BUY PRESSURE
+                "tag": "SALES SQUEEZE",
                 "img_url": "https://images.pokemontcg.io/dp7/103_hires.png",
-                "zoom_type": "macro_crop",
+                "crop_mode": "center",
+                "motion": "zoom_in",
                 "line1": "STORMFRONT & DP",
                 "line1_color": "#FFE600",
-                "line2": "30-DAY SALES",
+                "line2": "30-DAY SALES VOLUME",
                 "line2_color": "#FFFFFF",
-                "line3": "SURGING OVER 400%",
+                "line3": "EXPLODING OVER 400%",
                 "line3_color": "#00FF66"
             },
             {
-                "tag": "INVESTOR OUTLOOK",
+                # SCENE 4: INVESTOR VERDICT
+                "tag": "MARKET VERDICT",
                 "img_url": "https://images.pokemontcg.io/pl1/128_hires.png",
-                "zoom_type": "macro_slab",
-                "line1": "RAW COPIES DRIED",
+                "crop_mode": "art_box",
+                "motion": "pan_left",
+                "line1": "RAW SUPPLY DRIED",
                 "line1_color": "#FFE600",
-                "line2": "THE NEXT BIG VINTAGE",
+                "line2": "THE NEXT RETRO VINTAGE",
                 "line2_color": "#FFFFFF",
-                "line3": "MARKET ABSORPTION",
+                "line3": "AUCTION SQUEEZE",
                 "line3_color": "#00FF66"
             }
         ],
         "caption_full": (
             "🚨 MARKET ALERT | PLATINUM ERA LV.X IS MOVING FAST!\n\n"
-            "Between 2007 and 2009, Diamond & Pearl and Platinum introduced Level X holos with shimmering silver borders and dynamic Pokémon popping out of the artwork.\n\n"
-            "Today, PSA 10 populations for chase Lv.X cards like Rayquaza C, Charizard, and Garchomp are in the single digits worldwide.\n\n"
-            "Over the past 30 days, auction volume and buy pressure have surged over 400% as vintage collectors shift from WOTC to Platinum era grails!\n\n"
-            "Are you stacking Lv.X holos or focusing on modern SIRs? Let's discuss in the comments! 👇\n\n"
-            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-            "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
-        )
-    },
-    {
-        "story_id": "call_of_legends_doc",
-        "alert": "TRENDING NOW",
-        "scenes": [
-            {
-                "tag": "TRENDING NOW",
-                "img_url": "https://images.pokemontcg.io/swsh7/215_hires.png",
-                "zoom_type": "macro_slab",
-                "line1": "THE LOW POP",
-                "line1_color": "#FFE600",
-                "line2": "VINTAGE MARKET",
-                "line2_color": "#FFFFFF",
-                "line3": "IS SURGING.",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "SHINY GRAILS",
-                "img_url": "https://images.pokemontcg.io/swsh7/215_hires.png",
-                "zoom_type": "macro_crop",
-                "line1": "CALL OF LEGENDS",
-                "line1_color": "#FFE600",
-                "line2": "LUGIA & UMBREON",
-                "line2_color": "#FFFFFF",
-                "line3": "RECORD AUCTIONS",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "HISTORIC RARITY",
-                "img_url": "https://images.pokemontcg.io/ex8/105_hires.png",
-                "zoom_type": "macro_crop",
-                "line1": "EX ERA GOLD STARS",
-                "line1_color": "#FFE600",
-                "line2": "CGC PRISTINE 10",
-                "line2_color": "#FFFFFF",
-                "line3": "BLOWS PAST 45K USD",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "AUCTION VERDICT",
-                "img_url": "https://images.pokemontcg.io/ex14/100_hires.png",
-                "zoom_type": "macro_slab",
-                "line1": "BUY, SELL OR HOLD?",
-                "line1_color": "#FFE600",
-                "line2": "PRISTINE SUPPLY",
-                "line2_color": "#FFFFFF",
-                "line3": "VIRTUALLY EXTINCT",
-                "line3_color": "#00FF66"
-            }
-        ],
-        "caption_full": (
-            "🚨 TRENDING NOW | THE LOW POP VINTAGE MARKET IS SURGING!\n\n"
-            "High-grade vintage grails from Call of Legends and the mid-2000s EX era are breaking historical auction ceilings.\n\n"
-            "With populations locked away in private vaults, pristine 10 sales have doubled over the last quarter alone.\n\n"
-            "Are vintage grails the safest long-term hold in the Pokémon hobby? Let us know below! 👇\n\n"
+            "Between 2007 and 2009, Platinum and DP sets introduced iconic silver-border Level X holos.\n\n"
+            "With PSA 10 populations in the single digits, collectors and investors are aggressively absorbing all raw and graded supply across the market.\n\n"
+            "Are Lv.X cards the most undervalued era in vintage Pokémon? Drop your comments below! 👇\n\n"
             "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
             "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
         )
@@ -231,41 +188,47 @@ def draw_tight_text(draw, text, y, font, fill="white", stroke_fill="#000000", st
     draw.text((x, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
     return y + h - 8
 
-# --- CARD LADDER FULL-BLEED SLIDE GENERATOR ---
-def render_story_slide(scene, out_path):
-    img = Image.new("RGB", (W, H), (10, 10, 12))
-    draw = ImageDraw.Draw(img)
-
-    pdata = requests.get(scene["img_url"], headers=API_HEADERS).content
+# --- CROP & FIT IMAGES TO FILL 75%+ OF CANVAS ---
+def prepare_scene_base(img_url, crop_mode, out_path):
+    pdata = requests.get(img_url, headers=API_HEADERS).content
     with open("temp_raw.png", "wb") as f:
         f.write(pdata)
-    raw_img = Image.open("temp_raw.png").convert("RGB")
+    raw = Image.open("temp_raw.png").convert("RGB")
+    iw, ih = raw.size
 
-    photo_box_h = 1180
-    if scene["zoom_type"] == "macro_art":
-        iw, ih = raw_img.size
+    canvas = Image.new("RGB", (W, H), (10, 10, 14))
+
+    if crop_mode == "art_box":
+        # Macro zoom on the character illustration (like img_18)
         crop_box = (int(iw * 0.08), int(ih * 0.12), int(iw * 0.92), int(ih * 0.65))
-        raw_img = raw_img.crop(crop_box)
-        raw_img = raw_img.resize((W, photo_box_h), Image.Resampling.LANCZOS)
-        img.paste(raw_img, (0, 0))
-    elif scene["zoom_type"] == "macro_crop":
-        iw, ih = raw_img.size
-        crop_box = (int(iw * 0.10), int(ih * 0.18), int(iw * 0.90), int(ih * 0.72))
-        raw_img = raw_img.crop(crop_box)
-        raw_img = raw_img.resize((W, photo_box_h), Image.Resampling.LANCZOS)
-        img.paste(raw_img, (0, 0))
+        cropped = raw.crop(crop_box)
+        cropped = cropped.resize((W, 1220), Image.Resampling.LANCZOS)
+        canvas.paste(cropped, (0, 0))
+    elif crop_mode == "slab_top":
+        # Macro zoom on slab certification / label
+        crop_box = (0, 0, iw, int(ih * 0.60))
+        cropped = raw.crop(crop_box)
+        cropped = cropped.resize((W, 1220), Image.Resampling.LANCZOS)
+        canvas.paste(cropped, (0, 0))
     else:
-        raw_img.thumbnail((1000, 1140), Image.Resampling.LANCZOS)
-        rw, rh = raw_img.size
-        rx = (W - rw) // 2
-        ry = 30
-        img.paste(raw_img, (rx, ry))
+        # Full macro view filling 75% of height (like img_17, img_20)
+        raw.thumbnail((1020, 1180), Image.Resampling.LANCZOS)
+        rw, rh = raw.size
+        canvas.paste(raw, ((W - rw) // 2, 20))
 
-    # Dark Vignette Gradient Transition
-    for y in range(960, 1240):
-        t = (y - 960) / 280
+    # Dark gradient fade on bottom of image for crystal clear text overlay
+    draw = ImageDraw.Draw(canvas)
+    for y in range(980, 1260):
+        t = (y - 980) / 280
         alpha = int(255 * t)
-        draw.line([(0, y), (W, y)], fill=(10, 10, 12, alpha))
+        draw.line([(0, y), (W, y)], fill=(10, 10, 14, alpha))
+
+    canvas.save(out_path)
+
+# --- OVERLAY BUILDER (RED PILL + CLICKBAIT CONDENSED TYPOGRAPHY) ---
+def create_story_overlay(scene, out_path):
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
 
     # Red Alert Pill Badge
     tag_text = scene["tag"]
@@ -280,7 +243,7 @@ def render_story_slide(scene, out_path):
     draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=4, fill="#E50914")
     draw.text((ax + 28, ay + 6), tag_text, font=a_font, fill="#FFFFFF")
 
-    # Stacked Bebas Typography
+    # Stacked Bebas Headlines
     has_3 = bool(scene["line3"])
     f_size = 142 if has_3 else 178
     f_huge = get_font(f_size)
@@ -293,14 +256,14 @@ def render_story_slide(scene, out_path):
 
     img.save(out_path)
 
-# --- NEWSLETTER CTA OUTRO ---
+# --- NEWSLETTER CTA SLIDE ---
 def make_cta_slide(out_path="f_cta.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     cdata = requests.get(cta_url, headers=API_HEADERS).content
     with open("raw_cta.png", "wb") as f:
         f.write(cdata)
 
-    base = Image.new("RGB", (W, H), (10, 10, 12))
+    base = Image.new("RGB", (W, H), (10, 10, 14))
     cta_img = Image.open("raw_cta.png").convert("RGB")
     cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
     cw, ch = cta_img.size
@@ -316,36 +279,58 @@ def make_cta_slide(out_path="f_cta.png"):
     draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
-# --- FFMPEG 15-SECOND MINI-DOCUMENTARY COMPILER ---
-def compile_documentary_reel(story, output_mp4="pokepulse_reel.mp4"):
-    scene_files = []
-    # 4 Story Chapters (3.0s each)
-    for idx, sc in enumerate(story["scenes"]):
-        fname = f"scene_{idx+1}.png"
-        vname = f"s_{idx+1}.mp4"
-        print(f"Rendering Story Chapter {idx+1}: {sc['line1']}...")
-        render_story_slide(sc, fname)
-        subprocess.run([
-            "ffmpeg", "-y", "-loop", "1", "-t", "3.0", "-i", fname,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", vname
-        ], check=True)
-        scene_files.append(vname)
+# --- FFMPEG LIVE-ACTION MOTION COMPILER (Ken Burns Zoom/Pan per Scene) ---
+def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
+    scene_vids = []
 
-    # 5th Scene: Newsletter CTA (3.0s)
-    print("Rendering Scene 5: Newsletter CTA...")
+    for idx, sc in enumerate(story["scenes"]):
+        base_img = f"base_{idx+1}.png"
+        over_img = f"over_{idx+1}.png"
+        out_vid = f"scene_{idx+1}.mp4"
+
+        print(f"Generating live-action scene {idx+1}: {sc['line1']}...")
+        prepare_scene_base(sc["img_url"], sc["crop_mode"], base_img)
+        create_story_overlay(sc, over_img)
+
+        # Dynamic motion filter (Zoom In vs Pan)
+        if sc["motion"] == "zoom_in":
+            filter_str = (
+                "[0:v]scale=8000:-1,zoompan=z='min(zoom+0.0016,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=90:s=1080x1920:fps=30[bg];"
+                "[bg][1:v]overlay=0:0[out]"
+            )
+        elif sc["motion"] == "pan_right":
+            filter_str = (
+                "[0:v]scale=8000:-1,zoompan=z='1.10':x='(on/90)*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d=90:s=1080x1920:fps=30[bg];"
+                "[bg][1:v]overlay=0:0[out]"
+            )
+        else:
+            filter_str = (
+                "[0:v]scale=8000:-1,zoompan=z='1.10':x='(1-on/90)*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d=90:s=1080x1920:fps=30[bg];"
+                "[bg][1:v]overlay=0:0[out]"
+            )
+
+        cmd = [
+            "ffmpeg", "-y", "-loop", "1", "-i", base_img, "-i", over_img,
+            "-filter_complex", filter_str,
+            "-map", "[out]", "-t", "3.0", "-c:v", "libx264", "-pix_fmt", "yuv420p", out_vid
+        ]
+        subprocess.run(cmd, check=True)
+        scene_vids.append(out_vid)
+
+    # Scene 5: Newsletter CTA
+    print("Generating Scene 5 (Newsletter CTA)...")
     make_cta_slide("f_cta.png")
     subprocess.run([
         "ffmpeg", "-y", "-loop", "1", "-t", "3.0", "-i", "f_cta.png",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "s_cta.mp4"
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene_cta.mp4"
     ], check=True)
-    scene_files.append("s_cta.mp4")
+    scene_vids.append("scene_cta.mp4")
 
-    # Playlist
     with open("playlist.txt", "w") as f:
-        for v in scene_files:
+        for v in scene_vids:
             f.write(f"file '{v}'\n")
 
-    # Audio Download / Fallback (Total 15.0s)
+    # Broadcast audio stream
     audio_file = "bg_audio.mp3"
     audio_success = False
     for track_url in BROADCAST_AUDIO_TRACKS:
@@ -366,6 +351,7 @@ def compile_documentary_reel(story, output_mp4="pokepulse_reel.mp4"):
             "-c:a", "libmp3lame", "-b:a", "192k", audio_file
         ], check=True)
 
+    # Concat and output full 15s documentary Reel
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "playlist.txt",
         "-i", audio_file,
@@ -434,10 +420,10 @@ def publish_content(video_url, caption):
         print(f"Story Publish Result: {s_pub}")
 
 if __name__ == "__main__":
-    story = random.choice(DOCUMENTARY_NEWS_STORIES)
-    print(f"Producing 15s Story Documentary Reel: {story['story_id']}")
+    story = random.choice(LIVE_ACTION_STORIES)
+    print(f"Producing Live-Action Story Documentary: {story['story_id']}")
 
-    mp4_file = compile_documentary_reel(story, "pokepulse_reel.mp4")
+    mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
 
     print("Uploading to Cloudinary CDN...")
     upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
