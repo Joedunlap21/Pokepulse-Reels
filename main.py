@@ -1,224 +1,24 @@
 import os
-import random
+import re
 import time
 import subprocess
 import cloudinary
 import cloudinary.uploader
 import requests
+import xml.etree.ElementTree as ET
 from PIL import Image, ImageDraw, ImageFont
 
-cloudinary.config(
-    cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
-)
+cloudinary.config(cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip())
 
 API_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
 IG_USER_ID = "17841472317326348"
 
-# High-Energy Broadcast Beats
-BROADCAST_AUDIO_TRACKS = [
-    "https://actions.google.com/sounds/v1/sports/cheering_crowd.ogg",
-    "https://actions.google.com/sounds/v1/science_fiction/force_field_hum.ogg",
-    "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
-]
-
-FACT_CHECKED_STORIES = [
-    {
-        "story_id": "illustrator_pikachu_record",
-        "alert": "AUCTION RECORD",
-        "scenes": [
-            {
-                "tag": "AUCTION RECORD",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "center",
-                "motion": "zoom_in",
-                "line1": "THE 5.27 MILLION USD",
-                "line1_color": "#FFE600",
-                "line2": "HOLY GRAIL PIKACHU",
-                "line2_color": "#FFFFFF",
-                "line3": "GUINNESS RECORD",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "1998 COROCORO",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "art_box",
-                "motion": "pan_right",
-                "line1": "NEVER SOLD IN PACKS",
-                "line1_color": "#FFE600",
-                "line2": "DRAWN BY ATSUKO NISHIDA",
-                "line2_color": "#FFFFFF",
-                "line3": "PIKACHU'S ORIGINAL CREATOR",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "POP REPORT",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "slab_top",
-                "motion": "zoom_in",
-                "line1": "ONLY 39 COPIES AWARDED",
-                "line1_color": "#FFFFFF",
-                "line2": "EXACTLY ONE PSA 10",
-                "line2_color": "#FFE600",
-                "line3": "CONFIRMED IN EXISTENCE",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "AUCTION VERDICT",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "center",
-                "motion": "zoom_in",
-                "line1": "HIGHEST VALUED CARD",
-                "line1_color": "#FFE600",
-                "line2": "IN COLLECTING HISTORY",
-                "line2_color": "#FFFFFF",
-                "line3": "AN UNTOUCHABLE ICON",
-                "line3_color": "#00FF66"
-            }
-        ],
-        "caption_full": (
-            "🚨 AUCTION RECORD | THE 5.27 MILLION USD ILLUSTRATOR PIKACHU!\n\n"
-            "Facts Behind the Legend:\n"
-            "• Created in 1998 exclusively for 3 illustration contests in CoroCoro Comic.\n"
-            "• Drawn by Atsuko Nishida, the original creator of Pikachu.\n"
-            "• Only 39 official copies were awarded to winners worldwide.\n"
-            "• Certified by Guinness World Records as the most expensive Pokémon card ever sold at 5,275,000 USD.\n\n"
-            "Is Illustrator Pikachu the greatest collectible in modern history? Drop your thoughts below! 👇\n\n"
-            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-            "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
-        )
-    },
-    {
-        "story_id": "umbreon_gold_star_play",
-        "alert": "MARKET ALERT",
-        "scenes": [
-            {
-                "tag": "MARKET ALERT",
-                "img_url": "https://images.pokemontcg.io/swsh7/215_hires.png",
-                "crop_mode": "center",
-                "motion": "zoom_in",
-                "line1": "70,000 EXP POINTS",
-                "line1_color": "#FFE600",
-                "line2": "FOR THIS $70,000 USD",
-                "line2_color": "#FFFFFF",
-                "line3": "GOLD STAR GRAIL",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "DAISUKI CLUB",
-                "img_url": "https://images.pokemontcg.io/swsh7/215_hires.png",
-                "crop_mode": "art_box",
-                "motion": "pan_right",
-                "line1": "IMPOSSIBLE PLAY PROMO",
-                "line1_color": "#FFE600",
-                "line2": "PLAYERS PLAYED FOR YEARS",
-                "line2_color": "#FFFFFF",
-                "line3": "TO UNLOCK 70K POINTS",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "HISTORIC RARITY",
-                "img_url": "https://images.pokemontcg.io/swsh7/215_hires.png",
-                "crop_mode": "slab_top",
-                "motion": "zoom_in",
-                "line1": "FEWER THAN 35 COPIES",
-                "line1_color": "#FFFFFF",
-                "line2": "HAVE EVER RECEIVED",
-                "line2_color": "#FFE600",
-                "line3": "A PSA 10 GEM MINT",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "PRICE BREAKOUT",
-                "img_url": "https://images.pokemontcg.io/swsh7/215_hires.png",
-                "crop_mode": "center",
-                "motion": "zoom_in",
-                "line1": "AUCTION HAMMERS",
-                "line1_color": "#FFE600",
-                "line2": "SHATTERING CEILINGS",
-                "line2_color": "#FFFFFF",
-                "line3": "THE CROWN OF VINTAGE",
-                "line3_color": "#00FF66"
-            }
-        ],
-        "caption_full": (
-            "🚨 MARKET ALERT | 70,000 EXP POINTS FOR THIS $70,000+ UMBREON GOLD STAR!\n\n"
-            "Facts Behind the Card:\n"
-            "• Released in 2005 through the Japanese Pokémon Daisuki Club Players Program.\n"
-            "• Could never be pulled from a booster pack—trainers had to earn 70,000 EXP points through official league tournaments.\n"
-            "• Extremely few players accomplished the grind before the club retired the tier.\n"
-            "• Less than 35 PSA 10 copies exist in the world, commanding over 70,000 USD at high-end auctions.\n\n"
-            "Would you trade your entire collection for one PLAY Umbreon Gold Star? Let us know below! 👇\n\n"
-            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-            "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
-        )
-    },
-    {
-        "story_id": "zoroark_kindergarten_mystery",
-        "alert": "AUCTION ALERT",
-        "scenes": [
-            {
-                "tag": "AUCTION ALERT",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "center",
-                "motion": "zoom_in",
-                "line1": "A KINDERGARTENER",
-                "line1_color": "#FFE600",
-                "line2": "DESIGNED THIS",
-                "line2_color": "#FFFFFF",
-                "line3": "$72,000+ CARD",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "ORIGIN STORY",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "art_box",
-                "motion": "pan_right",
-                "line1": "IN 2010 JAPAN",
-                "line1_color": "#FFE600",
-                "line2": "6-YEAR-OLD MEGU WON",
-                "line2_color": "#FFFFFF",
-                "line3": "OFFICIAL DESIGN CONTEST",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "HISTORIC RARITY",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "slab_top",
-                "motion": "zoom_in",
-                "line1": "COPIES GIVEN ONLY",
-                "line1_color": "#FFFFFF",
-                "line2": "TO CONTEST WINNERS",
-                "line2_color": "#FFE600",
-                "line3": "LESS THAN 10 EXIST",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "AUCTION CLIMAX",
-                "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-                "crop_mode": "center",
-                "motion": "zoom_in",
-                "line1": "HAMMER DROPPED",
-                "line1_color": "#FFE600",
-                "line2": "AT $72,000 USD",
-                "line2_color": "#FFFFFF",
-                "line3": "ONLY BGS 10 ON EARTH",
-                "line3_color": "#00FF66"
-            }
-        ],
-        "caption_full": (
-            "🚨 AUCTION ALERT | A KINDERGARTENER DESIGNED THIS $72,000+ CARD!\n\n"
-            "Facts Behind the Legend:\n"
-            "• In 2010, the Pokémon Company ran the official 'Ruler of Illusion Zoroark' design contest across Japan.\n"
-            "• Kindergarten category winner Megu Taniguchi drew this charming Zorua riding in a bus with Pikachu.\n"
-            "• Winners were awarded official printed copies of their own cards—making supply virtually non-existent.\n"
-            "• The only copy ever to achieve a BGS Pristine 10 recently crossed the auction block at 72,000+ USD!\n\n"
-            "What would you do if you discovered this in your childhood binder? Tell us below! 👇\n\n"
-            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-            "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
-        )
-    }
+# LIVE TIER-1 POKEMON RSS FEEDS
+NEWS_FEEDS = [
+    {"source": "POKEBEACH", "url": "https://www.pokebeach.com/feed", "badge": "BREAKING NEWS"},
+    {"source": "POKEGUARDIAN", "url": "https://www.pokeguardian.com/rss.xml", "badge": "SET REVEAL"}
 ]
 
 W, H = 1080, 1920
@@ -233,76 +33,111 @@ def ensure_font():
 ensure_font()
 
 def get_font(size):
-    if os.path.exists("BebasNeue.ttf"):
-        try:
-            return ImageFont.truetype("BebasNeue.ttf", size)
-        except Exception:
-            pass
-    return ImageFont.load_default()
+    try:
+        return ImageFont.truetype("BebasNeue.ttf", size)
+    except Exception:
+        return ImageFont.load_default()
 
-def draw_autofit_text(draw, text, y, max_w=980, target_size=155, min_size=55, fill="white", stroke_fill="#000000", stroke_width=8):
+def fetch_latest_pokemon_news():
+    """Scrapes latest unposted breaking news from PokeBeach / PokeGuardian."""
+    posted_log = "posted_news.txt"
+    posted_ids = set()
+    if os.path.exists(posted_log):
+        with open(posted_log, "r") as f:
+            posted_ids = set(line.strip() for line in f if line.strip())
+
+    for feed in NEWS_FEEDS:
+        try:
+            r = requests.get(feed["url"], headers=API_HEADERS, timeout=12)
+            if r.status_code != 200:
+                continue
+            
+            root = ET.fromstring(r.content)
+            channel = root.find("channel")
+            if channel is None:
+                continue
+
+            for item in channel.findall("item"):
+                link = item.find("link").text.strip() if item.find("link") is not None else ""
+                if link in posted_ids:
+                    continue
+
+                title = item.find("title").text.strip() if item.find("title") is not None else "BREAKING POKÉMON UPDATE"
+                desc = item.find("description").text if item.find("description") is not None else ""
+                clean_desc = re.sub(r'<[^>]+>', '', desc).strip()
+
+                # Extract image thumbnail from description or enclosure
+                img_url = "https://images.pokemontcg.io/swsh7/215_hires.png"
+                img_match = re.search(r'src=["\'](https?://[^"\']+\.(?:png|jpg|jpeg))["\']', desc)
+                if img_match:
+                    img_url = img_match.group(1)
+
+                # Record as posted
+                with open(posted_log, "a") as f:
+                    f.write(link + "\n")
+
+                return {
+                    "source": feed["source"],
+                    "badge": feed["badge"],
+                    "title": title,
+                    "summary": clean_desc[:240],
+                    "img_url": img_url,
+                    "link": link
+                }
+        except Exception as e:
+            print(f"Error checking {feed['source']}: {e}")
+            continue
+
+    # Fallback to TCGplayer Market Alert if feeds are temporarily down
+    return {
+        "source": "TCGPLAYER MARKET",
+        "badge": "MARKET ALERT",
+        "title": "TEAM ROCKET EXPANSION MARKET SURGE",
+        "summary": "Special Illustration Rares and Secret Illustration Rares see double-digit price increases across major retail platforms.",
+        "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
+        "link": "https://infinite.tcgplayer.com/pokemon"
+    }
+
+def draw_autofit_text(draw, text, y, max_w=980, target_size=140, min_size=50, fill="white"):
     if not text:
         return y
-
     curr_size = target_size
     font = get_font(curr_size)
-
     while curr_size > min_size:
-        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
-        w = bbox[2] - bbox[0]
-        if w <= max_w:
+        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=6)
+        if (bbox[2] - bbox[0]) <= max_w:
             break
-        curr_size -= 3
+        curr_size -= 4
         font = get_font(curr_size)
-
-    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=6)
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
-    x = (W - w) // 2
+    draw.text(((W - w) // 2, y), text, font=font, fill=fill, stroke_fill="#000000", stroke_width=6)
+    return y + h + 10
 
-    draw.text((x, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
-    return y + h - 6
-
-def calculate_reading_duration(scene):
-    words = sum(len(scene.get(f"line{i}", "").split()) for i in [1, 2, 3])
-    calc_dur = 1.8 + (words * 0.28)
-    return round(max(2.4, min(calc_dur, 4.2)), 2)
-
-# --- LIGHTWEIGHT NATIVE SLIDE GENERATOR (Zero OOM / 100% Reliable) ---
-def render_native_scene_slide(scene, out_path):
+def render_news_slide(news, slide_type, out_path):
     img = Image.new("RGB", (W, H), (10, 10, 14))
     draw = ImageDraw.Draw(img)
 
-    pdata = requests.get(scene["img_url"], headers=API_HEADERS).content
-    with open("temp_raw.png", "wb") as f:
-        f.write(pdata)
-    raw = Image.open("temp_raw.png").convert("RGB")
-    iw, ih = raw.size
-
-    photo_h = 1200
-    if scene["crop_mode"] == "art_box":
-        crop_box = (int(iw * 0.08), int(ih * 0.12), int(iw * 0.92), int(ih * 0.65))
-        cropped = raw.crop(crop_box)
-        cropped = cropped.resize((W, photo_h), Image.Resampling.LANCZOS)
-        img.paste(cropped, (0, 0))
-    elif scene["crop_mode"] == "slab_top":
-        crop_box = (0, 0, iw, int(ih * 0.60))
-        cropped = raw.crop(crop_box)
-        cropped = cropped.resize((W, photo_h), Image.Resampling.LANCZOS)
-        img.paste(cropped, (0, 0))
-    else:
+    # Download article/card image
+    try:
+        pdata = requests.get(news["img_url"], headers=API_HEADERS, timeout=8).content
+        with open("temp_raw.png", "wb") as f:
+            f.write(pdata)
+        raw = Image.open("temp_raw.png").convert("RGB")
         raw.thumbnail((1020, 1160), Image.Resampling.LANCZOS)
         rw, rh = raw.size
-        img.paste(raw, ((W - rw) // 2, 20))
+        img.paste(raw, ((W - rw) // 2, 60))
+    except Exception:
+        pass
 
-    # Gradient fade behind text
+    # Black gradient underlay for text
     for y in range(980, 1260):
         t = (y - 980) / 280
-        alpha = int(255 * t)
-        draw.line([(0, y), (W, y)], fill=(10, 10, 14, alpha))
+        draw.line([(0, y), (W, y)], fill=(10, 10, 14, int(255 * t)))
 
-    # Red Alert Pill Badge
-    tag_text = scene["tag"]
+    # Red Pill Badge
+    tag_text = news["badge"] if slide_type == "hook" else news["source"]
     a_font = get_font(52)
     abox = draw.textbbox((0, 0), tag_text, font=a_font)
     aw = (abox[2] - abox[0]) + 56
@@ -314,14 +149,17 @@ def render_native_scene_slide(scene, out_path):
     draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=4, fill="#E50914")
     draw.text((ax + 28, ay + 6), tag_text, font=a_font, fill="#FFFFFF")
 
-    has_3 = bool(scene.get("line3"))
-    start_target = 142 if has_3 else 178
-
-    y_start = ay + ah + 16
-    y_start = draw_autofit_text(draw, scene.get("line1", ""), y_start, max_w=980, target_size=start_target, fill=scene.get("line1_color", "#FFFFFF"))
-    y_start = draw_autofit_text(draw, scene.get("line2", ""), y_start, max_w=980, target_size=start_target, fill=scene.get("line2_color", "#FFFFFF"))
-    if has_3:
-        draw_autofit_text(draw, scene.get("line3", ""), y_start, max_w=980, target_size=start_target, fill=scene.get("line3_color", "#00FF66"))
+    y_pos = ay + ah + 24
+    if slide_type == "hook":
+        words = news["title"].upper().split()
+        half = len(words) // 2
+        line1 = " ".join(words[:half])
+        line2 = " ".join(words[half:])
+        y_pos = draw_autofit_text(draw, line1, y_pos, target_size=145, fill="#FFE600")
+        draw_autofit_text(draw, line2, y_pos, target_size=145, fill="#FFFFFF")
+    else:
+        y_pos = draw_autofit_text(draw, "LATEST OFFICIAL REPORT", y_pos, target_size=120, fill="#FFE600")
+        draw_autofit_text(draw, news["summary"][:90].upper(), y_pos, target_size=85, fill="#FFFFFF")
 
     img.save(out_path)
 
@@ -335,150 +173,73 @@ def make_cta_slide(out_path="f_cta.png"):
     cta_img = Image.open("raw_cta.png").convert("RGB")
     cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
     cw, ch = cta_img.size
-    cx = (W - cw) // 2
-    cy = 160
-    base.paste(cta_img, (cx, cy))
+    base.paste(cta_img, ((W - cw) // 2, 160))
 
     draw = ImageDraw.Draw(base)
     draw.rounded_rectangle([80, 1620, W - 80, 1730], radius=55, fill="#FFE600", outline="#FFFFFF", width=3)
     c_font = get_font(52)
     c_box = draw.textbbox((0, 0), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font)
-    cw_txt = c_box[2] - c_box[0]
-    draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
+    draw.text(((W - (c_box[2] - c_box[0])) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
-# --- BULLETPROOF VIDEO COMPILER (Low Memory, Ultra Fast) ---
-def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
-    scene_vids = []
-    total_duration = 0.0
+def compile_and_post():
+    news = fetch_latest_pokemon_news()
+    print(f"Scraped Breaking Story: {news['title']} via {news['source']}")
 
-    for idx, sc in enumerate(story["scenes"]):
-        slide_img = f"slide_{idx+1}.png"
-        out_vid = f"scene_{idx+1}.mp4"
+    render_news_slide(news, "hook", "slide_1.png")
+    render_news_slide(news, "details", "slide_2.png")
+    make_cta_slide("slide_3.png")
 
-        dur = calculate_reading_duration(sc)
-        total_duration += dur
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "slide_1.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v1.mp4"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.8", "-i", "slide_2.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v2.mp4"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "2.8", "-i", "slide_3.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v3.mp4"], check=True)
 
-        print(f"Rendering scene {idx+1} ({dur}s): {sc['line1']}...")
-        render_native_scene_slide(sc, slide_img)
+    with open("list.txt", "w") as f:
+        f.write("file 'v1.mp4'\nfile 'v2.mp4'\nfile 'v3.mp4'\n")
 
-        # Standard H.264 encode - rock solid on GitHub Actions
-        subprocess.run([
-            "ffmpeg", "-y", "-loop", "1", "-t", str(dur), "-i", slide_img,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", out_vid
-        ], check=True)
-        scene_vids.append(out_vid)
-
-    cta_dur = 2.8
-    total_duration += cta_dur
-    print(f"Rendering Scene 5: Newsletter CTA ({cta_dur}s)...")
-    make_cta_slide("f_cta.png")
+    out_mp4 = "pokepulse_live_reel.mp4"
     subprocess.run([
-        "ffmpeg", "-y", "-loop", "1", "-t", str(cta_dur), "-i", "f_cta.png",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene_cta.mp4"
-    ], check=True)
-    scene_vids.append("scene_cta.mp4")
-
-    with open("playlist.txt", "w") as f:
-        for v in scene_vids:
-            f.write(f"file '{v}'\n")
-
-    audio_file = "bg_audio.mp3"
-    audio_success = False
-    for track_url in BROADCAST_AUDIO_TRACKS:
-        try:
-            r = requests.get(track_url, headers=API_HEADERS, timeout=8)
-            if r.status_code == 200 and len(r.content) > 10000:
-                with open(audio_file, "wb") as f:
-                    f.write(r.content)
-                audio_success = True
-                break
-        except Exception:
-            continue
-
-    if not audio_success:
-        subprocess.run([
-            "ffmpeg", "-y", "-f", "lavfi",
-            f"-i", f"sine=frequency=130:duration={total_duration}",
-            "-c:a", "libmp3lame", "-b:a", "192k", audio_file
-        ], check=True)
-
-    fade_start = round(total_duration - 1.5, 2)
-    subprocess.run([
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "playlist.txt",
-        "-i", audio_file,
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
-        "-c:a", "aac", "-b:a", "192k",
-        "-filter_complex", f"[1:a]afade=t=out:st={fade_start}:d=1.5[aout]",
-        "-map", "0:v", "-map", "[aout]",
-        "-t", str(total_duration),
-        output_mp4
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "list.txt",
+        "-f", "lavfi", "-i", "sine=frequency=130:duration=9.8",
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
+        "-t", "9.8", out_mp4
     ], check=True)
 
-    return output_mp4
+    print("Uploading live Reel to Cloudinary...")
+    res = cloudinary.uploader.upload_large(out_mp4, resource_type="video", folder="pokepulse_reels")
+    video_url = res.get("secure_url")
 
-def publish_content(video_url, caption):
+    caption = (
+        f"🚨 {news['badge']} | {news['title']}\n\n"
+        f"Source: {news['source']}\n\n"
+        f"{news['summary']}\n\n"
+        f"Read full breakdown & market impacts in this week's PokéPulse report!\n\n"
+        f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
+        f"#PokemonCards #PokemonTCG #PokeBeach #CardStax #PokemonNews #PokemonReels #PokePulse"
+    )
+
     access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
-
-    print("Step 1: Publishing Reel to Instagram...")
-    res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
+    r = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
         "media_type": "REELS",
         "video_url": video_url,
         "caption": caption,
         "access_token": access_token
     }).json()
 
-    if "id" in res:
-        cid = res["id"]
-        print(f"Reel Container: {cid}. Transcoding...")
-        for _ in range(18):
+    if "id" in r:
+        cid = r["id"]
+        for _ in range(15):
             time.sleep(10)
-            status = requests.get(f"https://graph.facebook.com/v21.0/{cid}?fields=status_code&access_token={access_token}").json()
-            code = status.get("status_code")
-            print(f"Status: {code}")
-            if code == "FINISHED":
+            st = requests.get(f"https://graph.facebook.com/v21.0/{cid}?fields=status_code&access_token={access_token}").json()
+            if st.get("status_code") == "FINISHED":
                 break
-            elif code == "ERROR":
-                print("Encoding error on Instagram.")
-                break
-
         pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
             "creation_id": cid,
             "access_token": access_token
         }).json()
-        print(f"Reel Publish Result: {pub}")
+        print("Published live news Reel:", pub)
     else:
-        print("Reel Error:", res)
-
-    print("\nStep 2: Publishing to Story...")
-    s_res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
-        "media_type": "STORIES",
-        "video_url": video_url,
-        "access_token": access_token
-    }).json()
-
-    if "id" in s_res:
-        sid = s_res["id"]
-        for _ in range(12):
-            time.sleep(8)
-            s_status = requests.get(f"https://graph.facebook.com/v21.0/{sid}?fields=status_code&access_token={access_token}").json()
-            if s_status.get("status_code") == "FINISHED":
-                break
-        s_pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
-            "creation_id": sid,
-            "access_token": access_token
-        }).json()
-        print(f"Story Publish Result: {s_pub}")
+        print("Publishing error:", r)
 
 if __name__ == "__main__":
-    story = random.choice(FACT_CHECKED_STORIES)
-    print(f"Producing Fact-Checked Documentary: {story['story_id']}")
-
-    mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
-
-    print("Uploading to Cloudinary CDN...")
-    upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
-    video_cdn_url = upload_res.get("secure_url")
-    print(f"CDN URL: {video_cdn_url}")
-
-    publish_content(video_cdn_url, story["caption_full"])
+    compile_and_post()
