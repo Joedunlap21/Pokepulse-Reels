@@ -18,9 +18,8 @@ API_HEADERS = {
 }
 IG_USER_ID = "17841472317326348"
 
-# Upbeat, Fun Pokémon-Style Melodic Adventure Tracks
-BROADCAST_AUDIO_TRACKS = [
-    "https://raw.githubusercontent.com/Joedunlap21/pokepulse-assets/main/pokemon_upbeat_route.mp3",
+# Real, Upbeat Royalty-Free Audio Tracks (Direct MP3 Downloads)
+AUDIO_TRACKS = [
     "https://actions.google.com/sounds/v1/cartoon/wood_whistle_bounce.ogg",
     "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
 ]
@@ -78,7 +77,6 @@ def calculate_reading_duration(scene):
     return round(max(2.4, min(calc_dur, 4.2)), 2)
 
 def fetch_unique_topic_images(query_term):
-    """Fetches high-res card scans specifically matching the news topic so every picture is unique."""
     clean_term = re.sub(r'[^a-zA-Z0-9\s]', '', query_term).strip()
     words = [w for w in clean_term.split() if len(w) > 3 and w.lower() not in ["pokemon", "cards", "expansion", "revealed", "tcg", "official", "promo"]]
     search_keyword = words[0] if words else "Pikachu"
@@ -86,29 +84,28 @@ def fetch_unique_topic_images(query_term):
     url = f"https://api.pokemontcg.io/v2/cards?q=name:{search_keyword}*&pageSize=4"
     images = []
     try:
-        r = requests.get(url, headers=API_HEADERS, timeout=8).json()
-        for card in r.get("data", []):
-            hi = card.get("images", {}).get("large") or card.get("images", {}).get("small")
-            if hi:
-                images.append(hi)
-    except Exception as e:
-        print(f"TCG API search error: {e}")
+        res = requests.get(url, headers=API_HEADERS, timeout=8)
+        if res.status_code == 200:
+            data = res.json().get("data", [])
+            for card in data:
+                hi = card.get("images", {}).get("large") or card.get("images", {}).get("small")
+                if hi:
+                    images.append(hi)
+    except Exception:
+        pass
 
-    # Fallback to high-value chase cards if needed
-    if len(images) < 4:
-        chase_pool = [
-            "https://images.pokemontcg.io/swsh7/215_hires.png",
-            "https://images.pokemontcg.io/col1/22_hires.png",
-            "https://images.pokemontcg.io/sv3pt5/199_hires.png",
-            "https://images.pokemontcg.io/swsh8/269_hires.png"
-        ]
-        for c in chase_pool:
-            if c not in images:
-                images.append(c)
+    chase_pool = [
+        "https://images.pokemontcg.io/swsh7/215_hires.png",
+        "https://images.pokemontcg.io/col1/22_hires.png",
+        "https://images.pokemontcg.io/sv3pt5/199_hires.png",
+        "https://images.pokemontcg.io/swsh8/269_hires.png"
+    ]
+    for c in chase_pool:
+        if len(images) < 4 and c not in images:
+            images.append(c)
     return images[:4]
 
 def build_dynamic_story_from_live_news():
-    """Scrapes latest unposted breaking Pokémon article from PokeBeach / PokeGuardian."""
     posted_log = "posted_news.txt"
     posted = set()
     if os.path.exists(posted_log):
@@ -134,7 +131,6 @@ def build_dynamic_story_from_live_news():
                 desc = item.find("description").text if item.find("description") is not None else ""
                 clean_desc = re.sub(r'<[^>]+>', '', desc).strip()
 
-                # Scrape article images
                 article_images = []
                 try:
                     art_page = requests.get(link, headers=API_HEADERS, timeout=8)
@@ -146,7 +142,6 @@ def build_dynamic_story_from_live_news():
                 except Exception:
                     pass
 
-                # If article doesn't have 4 images, supplement with topic-matched card scans
                 if len(article_images) < 4:
                     supplements = fetch_unique_topic_images(raw_title)
                     for s in supplements:
@@ -156,7 +151,6 @@ def build_dynamic_story_from_live_news():
                 with open(posted_log, "a") as f:
                     f.write(link + "\n")
 
-                # Format title words
                 words = raw_title.upper().split()
                 half = max(1, len(words) // 2)
                 t1 = " ".join(words[:half])
@@ -224,7 +218,6 @@ def build_dynamic_story_from_live_news():
             print(f"Error checking {source['name']}: {e}")
             continue
 
-    # Fallback to authentic Pikachu Illustrator story
     chase_imgs = fetch_unique_topic_images("Pikachu Illustrator")
     return {
         "story_id": "illustrator_pikachu_record",
@@ -287,7 +280,6 @@ def build_dynamic_story_from_live_news():
         )
     }
 
-# --- EXACT BASELINE SLIDE GENERATOR ---
 def render_native_scene_slide(scene, out_path):
     img = Image.new("RGB", (W, H), (10, 10, 14))
     draw = ImageDraw.Draw(img)
@@ -369,7 +361,6 @@ def make_cta_slide(out_path="f_cta.png"):
     draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
-# --- EXACT BASELINE VIDEO COMPILER ---
 def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
     scene_vids = []
     total_duration = 0.0
@@ -404,29 +395,35 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
         for v in scene_vids:
             f.write(f"file '{v}'\n")
 
-    # Generate Upbeat Melodic Audio
+    # Download authentic upbeat audio track directly
     audio_file = "bg_audio.mp3"
-    subprocess.run([
-        "ffmpeg", "-y", "-f", "lavfi",
-        "-i", f"aevalsrc=sin(880*2*PI*t)*0.2*lt(mod(t*4,1),0.4)+sin(1174.66*2*PI*t)*0.25*between(mod(t*4,1),0.1,0.5)+sin(1318.51*2*PI*t)*0.2*between(mod(t*4,1),0.2,0.6)+sin(1760*2*PI*t)*0.15*between(mod(t*4,1),0.3,0.7):s=44100:d={total_duration}",
-        "-c:a", "libmp3lame", "-b:a", "192k", audio_file
-    ], check=True)
+    try:
+        r = requests.get(random.choice(AUDIO_TRACKS), headers=API_HEADERS, timeout=8)
+        with open(audio_file, "wb") as f:
+            f.write(r.content)
+    except Exception:
+        # Fallback to pure sine beep tone if network blocks
+        subprocess.run([
+            "ffmpeg", "-y", "-f", "lavfi",
+            f"-i", f"sine=frequency=220:duration={total_duration}",
+            "-c:a", "libmp3lame", audio_file
+        ], check=True)
 
-    fade_start = round(total_duration - 1.5, 2)
+    fade_start = round(total_duration - 1.2, 2)
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "playlist.txt",
-        "-i", audio_file,
+        "-stream_loop", "-1", "-i", audio_file,
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
         "-c:a", "aac", "-b:a", "192k",
-        "-filter_complex", f"[1:a]afade=t=out:st={fade_start}:d=1.5[aout]",
+        "-filter_complex", f"[1:a]afade=t=out:st={fade_start}:d=1.2[aout]",
         "-map", "0:v", "-map", "[aout]",
+        "-shortest",
         "-t", str(total_duration),
         output_mp4
     ], check=True)
 
     return output_mp4
 
-# --- EXACT BASELINE PUBLISHER ---
 def publish_content(video_url, caption):
     access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
 
