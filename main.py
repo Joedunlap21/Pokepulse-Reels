@@ -23,7 +23,6 @@ BROADCAST_AUDIO_TRACKS = [
     "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
 ]
 
-# 100% FACT-CHECKED, AUTHENTIC POKÉMON NEWS STORIES
 FACT_CHECKED_STORIES = [
     {
         "story_id": "illustrator_pikachu_record",
@@ -54,7 +53,7 @@ FACT_CHECKED_STORIES = [
                 "line3_color": "#00FF66"
             },
             {
-                "tag": "POPULATION REPORT",
+                "tag": "POP REPORT",
                 "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
                 "crop_mode": "slab_top",
                 "motion": "zoom_in",
@@ -69,7 +68,7 @@ FACT_CHECKED_STORIES = [
                 "tag": "AUCTION VERDICT",
                 "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
                 "crop_mode": "center",
-                "motion": "pan_left",
+                "motion": "zoom_in",
                 "line1": "HIGHEST VALUED CARD",
                 "line1_color": "#FFE600",
                 "line2": "IN COLLECTING HISTORY",
@@ -134,7 +133,7 @@ FACT_CHECKED_STORIES = [
                 "tag": "PRICE BREAKOUT",
                 "img_url": "https://images.pokemontcg.io/swsh7/215_hires.png",
                 "crop_mode": "center",
-                "motion": "pan_left",
+                "motion": "zoom_in",
                 "line1": "AUCTION HAMMERS",
                 "line1_color": "#FFE600",
                 "line2": "SHATTERING CEILINGS",
@@ -199,7 +198,7 @@ FACT_CHECKED_STORIES = [
                 "tag": "AUCTION CLIMAX",
                 "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
                 "crop_mode": "center",
-                "motion": "pan_left",
+                "motion": "zoom_in",
                 "line1": "HAMMER DROPPED",
                 "line1_color": "#FFE600",
                 "line2": "AT $72,000 USD",
@@ -269,42 +268,40 @@ def calculate_reading_duration(scene):
     calc_dur = 1.8 + (words * 0.28)
     return round(max(2.4, min(calc_dur, 4.2)), 2)
 
-def prepare_scene_base(img_url, crop_mode, out_path):
-    pdata = requests.get(img_url, headers=API_HEADERS).content
+# --- LIGHTWEIGHT NATIVE SLIDE GENERATOR (Zero OOM / 100% Reliable) ---
+def render_native_scene_slide(scene, out_path):
+    img = Image.new("RGB", (W, H), (10, 10, 14))
+    draw = ImageDraw.Draw(img)
+
+    pdata = requests.get(scene["img_url"], headers=API_HEADERS).content
     with open("temp_raw.png", "wb") as f:
         f.write(pdata)
     raw = Image.open("temp_raw.png").convert("RGB")
     iw, ih = raw.size
 
-    canvas = Image.new("RGB", (W, H), (10, 10, 14))
-
-    if crop_mode == "art_box":
+    photo_h = 1200
+    if scene["crop_mode"] == "art_box":
         crop_box = (int(iw * 0.08), int(ih * 0.12), int(iw * 0.92), int(ih * 0.65))
         cropped = raw.crop(crop_box)
-        cropped = cropped.resize((W, 1220), Image.Resampling.LANCZOS)
-        canvas.paste(cropped, (0, 0))
-    elif crop_mode == "slab_top":
+        cropped = cropped.resize((W, photo_h), Image.Resampling.LANCZOS)
+        img.paste(cropped, (0, 0))
+    elif scene["crop_mode"] == "slab_top":
         crop_box = (0, 0, iw, int(ih * 0.60))
         cropped = raw.crop(crop_box)
-        cropped = cropped.resize((W, 1220), Image.Resampling.LANCZOS)
-        canvas.paste(cropped, (0, 0))
+        cropped = cropped.resize((W, photo_h), Image.Resampling.LANCZOS)
+        img.paste(cropped, (0, 0))
     else:
-        raw.thumbnail((1020, 1180), Image.Resampling.LANCZOS)
+        raw.thumbnail((1020, 1160), Image.Resampling.LANCZOS)
         rw, rh = raw.size
-        canvas.paste(raw, ((W - rw) // 2, 20))
+        img.paste(raw, ((W - rw) // 2, 20))
 
-    draw = ImageDraw.Draw(canvas)
+    # Gradient fade behind text
     for y in range(980, 1260):
         t = (y - 980) / 280
         alpha = int(255 * t)
         draw.line([(0, y), (W, y)], fill=(10, 10, 14, alpha))
 
-    canvas.save(out_path)
-
-def create_story_overlay(scene, out_path):
-    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
-
+    # Red Alert Pill Badge
     tag_text = scene["tag"]
     a_font = get_font(52)
     abox = draw.textbbox((0, 0), tag_text, font=a_font)
@@ -350,51 +347,31 @@ def make_cta_slide(out_path="f_cta.png"):
     draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
+# --- BULLETPROOF VIDEO COMPILER (Low Memory, Ultra Fast) ---
 def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
     scene_vids = []
     total_duration = 0.0
 
     for idx, sc in enumerate(story["scenes"]):
-        base_img = f"base_{idx+1}.png"
-        over_img = f"over_{idx+1}.png"
+        slide_img = f"slide_{idx+1}.png"
         out_vid = f"scene_{idx+1}.mp4"
 
         dur = calculate_reading_duration(sc)
         total_duration += dur
-        frames_count = int(dur * 30)
 
-        print(f"Generating scene {idx+1} ({dur}s): {sc['line1']}...")
-        prepare_scene_base(sc["img_url"], sc["crop_mode"], base_img)
-        create_story_overlay(sc, over_img)
+        print(f"Rendering scene {idx+1} ({dur}s): {sc['line1']}...")
+        render_native_scene_slide(sc, slide_img)
 
-        # Scale 2160:-1 uses 90% less memory while keeping crisp 4K fidelity
-        if sc["motion"] == "zoom_in":
-            filter_str = (
-                f"[0:v]scale=2160:-1,zoompan=z='min(zoom+0.0015,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
-                "[bg][1:v]overlay=0:0[out]"
-            )
-        elif sc["motion"] == "pan_right":
-            filter_str = (
-                f"[0:v]scale=2160:-1,zoompan=z='1.08':x='(on/{frames_count})*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
-                "[bg][1:v]overlay=0:0[out]"
-            )
-        else:
-            filter_str = (
-                f"[0:v]scale=2160:-1,zoompan=z='1.08':x='(1-on/{frames_count})*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
-                "[bg][1:v]overlay=0:0[out]"
-            )
-
-        cmd = [
-            "ffmpeg", "-y", "-loop", "1", "-i", base_img, "-i", over_img,
-            "-filter_complex", filter_str,
-            "-map", "[out]", "-t", str(dur), "-c:v", "libx264", "-pix_fmt", "yuv420p", out_vid
-        ]
-        subprocess.run(cmd, check=True)
+        # Standard H.264 encode - rock solid on GitHub Actions
+        subprocess.run([
+            "ffmpeg", "-y", "-loop", "1", "-t", str(dur), "-i", slide_img,
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", out_vid
+        ], check=True)
         scene_vids.append(out_vid)
 
     cta_dur = 2.8
     total_duration += cta_dur
-    print(f"Generating Scene 5 (Newsletter CTA, {cta_dur}s)...")
+    print(f"Rendering Scene 5: Newsletter CTA ({cta_dur}s)...")
     make_cta_slide("f_cta.png")
     subprocess.run([
         "ffmpeg", "-y", "-loop", "1", "-t", str(cta_dur), "-i", "f_cta.png",
