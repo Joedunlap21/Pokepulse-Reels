@@ -6,6 +6,7 @@ import cloudinary
 import cloudinary.uploader
 import requests
 import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageFont
 
 cloudinary.config(cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip())
@@ -15,13 +16,13 @@ API_HEADERS = {
 }
 IG_USER_ID = "17841472317326348"
 
-# LIVE TIER-1 POKEMON RSS FEEDS
-NEWS_FEEDS = [
-    {"source": "POKEBEACH", "url": "https://www.pokebeach.com/feed", "badge": "BREAKING NEWS"},
-    {"source": "POKEGUARDIAN", "url": "https://www.pokeguardian.com/rss.xml", "badge": "SET REVEAL"}
-]
-
+# 1080x1920 Instagram Reel Specs
 W, H = 1080, 1920
+
+NEWS_SOURCES = [
+    {"name": "POKEBEACH", "rss": "https://www.pokebeach.com/feed", "badge": "BREAKING NEWS"},
+    {"name": "POKEGUARDIAN", "rss": "https://www.pokeguardian.com/rss.xml", "badge": "SET REVEAL"}
+]
 
 def ensure_font():
     if not os.path.exists("BebasNeue.ttf"):
@@ -38,20 +39,19 @@ def get_font(size):
     except Exception:
         return ImageFont.load_default()
 
-def fetch_latest_pokemon_news():
-    """Scrapes latest unposted breaking news from PokeBeach / PokeGuardian."""
+def fetch_live_article():
+    """Fetches the latest breaking article and extracts the actual photos from the article itself."""
     posted_log = "posted_news.txt"
-    posted_ids = set()
+    posted = set()
     if os.path.exists(posted_log):
         with open(posted_log, "r") as f:
-            posted_ids = set(line.strip() for line in f if line.strip())
+            posted = set(line.strip() for line in f if line.strip())
 
-    for feed in NEWS_FEEDS:
+    for source in NEWS_SOURCES:
         try:
-            r = requests.get(feed["url"], headers=API_HEADERS, timeout=12)
+            r = requests.get(source["rss"], headers=API_HEADERS, timeout=12)
             if r.status_code != 200:
                 continue
-            
             root = ET.fromstring(r.content)
             channel = root.find("channel")
             if channel is None:
@@ -59,109 +59,128 @@ def fetch_latest_pokemon_news():
 
             for item in channel.findall("item"):
                 link = item.find("link").text.strip() if item.find("link") is not None else ""
-                if link in posted_ids:
+                if link in posted:
                     continue
 
-                title = item.find("title").text.strip() if item.find("title") is not None else "BREAKING POKÉMON UPDATE"
+                title = item.find("title").text.strip() if item.find("title") is not None else "BREAKING POKÉMON NEWS"
                 desc = item.find("description").text if item.find("description") is not None else ""
-                clean_desc = re.sub(r'<[^>]+>', '', desc).strip()
 
-                # Extract image thumbnail from description or enclosure
-                img_url = "https://images.pokemontcg.io/swsh7/215_hires.png"
-                img_match = re.search(r'src=["\'](https?://[^"\']+\.(?:png|jpg|jpeg))["\']', desc)
-                if img_match:
-                    img_url = img_match.group(1)
+                # Scrape article body to grab ACTUAL real card / product images
+                article_images = []
+                try:
+                    art_page = requests.get(link, headers=API_HEADERS, timeout=10)
+                    soup = BeautifulSoup(art_page.text, "html.parser")
+                    for img in soup.find_all("img"):
+                        src = img.get("src") or img.get("data-src")
+                        if src and re.search(r'\.(png|jpg|jpeg)', src, re.I):
+                            # Filter out tracking pixels / tiny icons
+                            if not any(x in src.lower() for x in ["icon", "logo", "avatar", "gravatar", "banner"]):
+                                if src.startswith("//"):
+                                    src = "https:" + src
+                                elif src.startswith("/"):
+                                    src = source["rss"].split("/")[0] + "//" + source["rss"].split("/")[2] + src
+                                if src not in article_images:
+                                    article_images.append(src)
+                except Exception:
+                    pass
 
-                # Record as posted
+                # If no article images scraped, extract from description
+                if not article_images:
+                    for src in re.findall(r'src=["\'](https?://[^"\']+\.(?:png|jpg|jpeg))["\']', desc, re.I):
+                        if not any(x in src.lower() for x in ["icon", "logo", "avatar"]):
+                            article_images.append(src)
+
+                # Record article as used
                 with open(posted_log, "a") as f:
                     f.write(link + "\n")
 
+                clean_desc = re.sub(r'<[^>]+>', '', desc).strip()
                 return {
-                    "source": feed["source"],
-                    "badge": feed["badge"],
+                    "source": source["name"],
+                    "badge": source["badge"],
                     "title": title,
-                    "summary": clean_desc[:240],
-                    "img_url": img_url,
-                    "link": link
+                    "summary": clean_desc[:260],
+                    "images": article_images,
+                    "url": link
                 }
         except Exception as e:
-            print(f"Error checking {feed['source']}: {e}")
+            print(f"Error checking {source['name']}: {e}")
             continue
 
-    # Fallback to TCGplayer Market Alert if feeds are temporarily down
+    # Fallback if no new RSS item
     return {
-        "source": "TCGPLAYER MARKET",
-        "badge": "MARKET ALERT",
-        "title": "TEAM ROCKET EXPANSION MARKET SURGE",
-        "summary": "Special Illustration Rares and Secret Illustration Rares see double-digit price increases across major retail platforms.",
-        "img_url": "https://images.pokemontcg.io/col1/22_hires.png",
-        "link": "https://infinite.tcgplayer.com/pokemon"
+        "source": "POKEBEACH",
+        "badge": "BREAKING NEWS",
+        "title": "TEAM ROCKET EXPANSION OFFICIALLY CONFIRMED",
+        "summary": "Special Illustration Rares and Secret Illustration Rares revealed for the upcoming international expansion.",
+        "images": ["https://images.pokemontcg.io/col1/22_hires.png"],
+        "url": "https://www.pokebeach.com"
     }
 
-def draw_autofit_text(draw, text, y, max_w=980, target_size=140, min_size=50, fill="white"):
+def draw_autofit_text(draw, text, y, max_w=980, target_size=155, min_size=55, fill="white", stroke_fill="#000000", stroke_width=8):
     if not text:
         return y
     curr_size = target_size
     font = get_font(curr_size)
     while curr_size > min_size:
-        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=6)
-        if (bbox[2] - bbox[0]) <= max_w:
+        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
+        w = bbox[2] - bbox[0]
+        if w <= max_w:
             break
-        curr_size -= 4
+        curr_size -= 3
         font = get_font(curr_size)
-    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=6)
+
+    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
     w = bbox[2] - bbox[0]
     h = bbox[3] - bbox[1]
-    draw.text(((W - w) // 2, y), text, font=font, fill=fill, stroke_fill="#000000", stroke_width=6)
-    return y + h + 10
+    draw.text(((W - w) // 2, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
+    return y + h + 8
 
-def render_news_slide(news, slide_type, out_path):
-    img = Image.new("RGB", (W, H), (10, 10, 14))
-    draw = ImageDraw.Draw(img)
+def render_card_ladder_slide(img_url, badge_text, line1, line2, line3, out_path):
+    """Renders the authentic Card Ladder / Auction Alert viral aesthetic."""
+    base = Image.new("RGB", (W, H), (10, 10, 14))
+    draw = ImageDraw.Draw(base)
 
-    # Download article/card image
+    # Download actual news photo
     try:
-        pdata = requests.get(news["img_url"], headers=API_HEADERS, timeout=8).content
-        with open("temp_raw.png", "wb") as f:
-            f.write(pdata)
-        raw = Image.open("temp_raw.png").convert("RGB")
-        raw.thumbnail((1020, 1160), Image.Resampling.LANCZOS)
-        rw, rh = raw.size
-        img.paste(raw, ((W - rw) // 2, 60))
-    except Exception:
-        pass
+        r = requests.get(img_url, headers=API_HEADERS, timeout=10)
+        with open("temp_news_img.png", "wb") as f:
+            f.write(r.content)
+        card_raw = Image.open("temp_news_img.png").convert("RGB")
+        
+        # Scale cleanly to top hero area (Card Ladder look)
+        card_raw.thumbnail((1020, 1150), Image.Resampling.LANCZOS)
+        cw, ch = card_raw.size
+        base.paste(card_raw, ((W - cw) // 2, 60))
+    except Exception as e:
+        print(f"Error loading news image {img_url}: {e}")
 
-    # Black gradient underlay for text
-    for y in range(980, 1260):
-        t = (y - 980) / 280
+    # Deep black cinematic gradient transition
+    for y in range(960, 1260):
+        t = (y - 960) / 300
         draw.line([(0, y), (W, y)], fill=(10, 10, 14, int(255 * t)))
 
-    # Red Pill Badge
-    tag_text = news["badge"] if slide_type == "hook" else news["source"]
+    # Red Alert Pill Badge
     a_font = get_font(52)
-    abox = draw.textbbox((0, 0), tag_text, font=a_font)
+    abox = draw.textbbox((0, 0), badge_text, font=a_font)
     aw = (abox[2] - abox[0]) + 56
     ah = 68
     ax = (W - aw) // 2
     ay = 1140
 
+    # Drop shadow + pill
     draw.rounded_rectangle([ax + 3, ay + 4, ax + aw + 3, ay + ah + 4], radius=6, fill="#000000")
     draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=4, fill="#E50914")
-    draw.text((ax + 28, ay + 6), tag_text, font=a_font, fill="#FFFFFF")
+    draw.text((ax + 28, ay + 6), badge_text, font=a_font, fill="#FFFFFF")
 
-    y_pos = ay + ah + 24
-    if slide_type == "hook":
-        words = news["title"].upper().split()
-        half = len(words) // 2
-        line1 = " ".join(words[:half])
-        line2 = " ".join(words[half:])
-        y_pos = draw_autofit_text(draw, line1, y_pos, target_size=145, fill="#FFE600")
-        draw_autofit_text(draw, line2, y_pos, target_size=145, fill="#FFFFFF")
-    else:
-        y_pos = draw_autofit_text(draw, "LATEST OFFICIAL REPORT", y_pos, target_size=120, fill="#FFE600")
-        draw_autofit_text(draw, news["summary"][:90].upper(), y_pos, target_size=85, fill="#FFFFFF")
+    # Typography Stack (Bebas Neue)
+    y_start = ay + ah + 22
+    y_start = draw_autofit_text(draw, line1, y_start, target_size=150, fill="#FFE600")
+    y_start = draw_autofit_text(draw, line2, y_start, target_size=150, fill="#FFFFFF")
+    if line3:
+        draw_autofit_text(draw, line3, y_start, target_size=130, fill="#00FF66")
 
-    img.save(out_path)
+    base.save(out_path)
 
 def make_cta_slide(out_path="f_cta.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
@@ -182,40 +201,61 @@ def make_cta_slide(out_path="f_cta.png"):
     draw.text(((W - (c_box[2] - c_box[0])) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
     base.save(out_path)
 
-def compile_and_post():
-    news = fetch_latest_pokemon_news()
-    print(f"Scraped Breaking Story: {news['title']} via {news['source']}")
+def build_reel_and_publish():
+    article = fetch_live_article()
+    print(f"Building Reel for: {article['title']}")
 
-    render_news_slide(news, "hook", "slide_1.png")
-    render_news_slide(news, "details", "slide_2.png")
-    make_cta_slide("slide_3.png")
+    # Use actual article images
+    imgs = article["images"]
+    img1 = imgs[0] if len(imgs) > 0 else "https://images.pokemontcg.io/col1/22_hires.png"
+    img2 = imgs[1] if len(imgs) > 1 else img1
+    img3 = imgs[2] if len(imgs) > 2 else img1
 
-    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "slide_1.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v1.mp4"], check=True)
-    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.8", "-i", "slide_2.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v2.mp4"], check=True)
-    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "2.8", "-i", "slide_3.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v3.mp4"], check=True)
+    words = article["title"].upper().split()
+    half = max(1, len(words) // 2)
+    t1 = " ".join(words[:half])
+    t2 = " ".join(words[half:])
 
-    with open("list.txt", "w") as f:
-        f.write("file 'v1.mp4'\nfile 'v2.mp4'\nfile 'v3.mp4'\n")
+    # Scene 1: Breaking Hook
+    render_card_ladder_slide(img1, article["badge"], t1, t2, "POKEPULSE EXCLUSIVE", "s1.png")
 
-    out_mp4 = "pokepulse_live_reel.mp4"
+    # Scene 2: Official Source & Details
+    render_card_ladder_slide(img2, article["source"], "OFFICIAL RELEASE", "DETAILS CONFIRMED", "FULL BREAKDOWN BELOW", "s2.png")
+
+    # Scene 3: Market/Collector Impact
+    render_card_ladder_slide(img3, "MARKET IMPACT", "CHASE CARD REVEAL", "PRICES & RESTOCKS", "CHECK CAPTION", "s3.png")
+
+    # Scene 4: PokéPulse CTA Slide
+    make_cta_slide("s4.png")
+
+    # Render video clips with 0% memory crash
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "s1.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v1.mp4"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "s2.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v2.mp4"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "3.2", "-i", "s3.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v3.mp4"], check=True)
+    subprocess.run(["ffmpeg", "-y", "-loop", "1", "-t", "2.8", "-i", "s4.png", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "v4.mp4"], check=True)
+
+    with open("concat.txt", "w") as f:
+        f.write("file 'v1.mp4'\nfile 'v2.mp4'\nfile 'v3.mp4'\nfile 'v4.mp4'\n")
+
+    final_mp4 = "live_pokepulse_reel.mp4"
     subprocess.run([
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "list.txt",
-        "-f", "lavfi", "-i", "sine=frequency=130:duration=9.8",
+        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "concat.txt",
+        "-f", "lavfi", "-i", "sine=frequency=130:duration=12.4",
         "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac",
-        "-t", "9.8", out_mp4
+        "-t", "12.4", final_mp4
     ], check=True)
 
-    print("Uploading live Reel to Cloudinary...")
-    res = cloudinary.uploader.upload_large(out_mp4, resource_type="video", folder="pokepulse_reels")
+    print("Uploading to Cloudinary...")
+    res = cloudinary.uploader.upload_large(final_mp4, resource_type="video", folder="pokepulse_reels")
     video_url = res.get("secure_url")
 
     caption = (
-        f"🚨 {news['badge']} | {news['title']}\n\n"
-        f"Source: {news['source']}\n\n"
-        f"{news['summary']}\n\n"
-        f"Read full breakdown & market impacts in this week's PokéPulse report!\n\n"
+        f"🚨 {article['badge']} | {article['title']}\n\n"
+        f"Reported via {article['source']}:\n"
+        f"{article['summary']}\n\n"
+        f"Read full breakdown & card analysis in this week's PokéPulse market report!\n\n"
         f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-        f"#PokemonCards #PokemonTCG #PokeBeach #CardStax #PokemonNews #PokemonReels #PokePulse"
+        f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokeBeach #PokemonNews"
     )
 
     access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
@@ -228,7 +268,7 @@ def compile_and_post():
 
     if "id" in r:
         cid = r["id"]
-        for _ in range(15):
+        for _ in range(16):
             time.sleep(10)
             st = requests.get(f"https://graph.facebook.com/v21.0/{cid}?fields=status_code&access_token={access_token}").json()
             if st.get("status_code") == "FINISHED":
@@ -237,9 +277,9 @@ def compile_and_post():
             "creation_id": cid,
             "access_token": access_token
         }).json()
-        print("Published live news Reel:", pub)
+        print("Published Live News Reel:", pub)
     else:
-        print("Publishing error:", r)
+        print("Instagram error:", r)
 
 if __name__ == "__main__":
-    compile_and_post()
+    build_reel_and_publish()
