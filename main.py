@@ -72,7 +72,6 @@ def calculate_reading_duration(scene):
     return round(max(2.4, min(calc_dur, 4.2)), 2)
 
 def scrape_exact_article_images(article_url, domain):
-    """Scrapes the real card scans and product images directly from inside the article body."""
     found_images = []
     try:
         r = requests.get(article_url, headers=API_HEADERS, timeout=10)
@@ -80,34 +79,29 @@ def scrape_exact_article_images(article_url, domain):
             return []
         
         html = r.text
-        # Extract images specifically from content tags (avoiding avatars, banners, sidebars)
         raw_imgs = re.findall(r'<img[^>]+(?:src|data-src|data-lazy-src)=["\']([^"\']+\.(?:png|jpg|jpeg))["\']', html, re.I)
         
         for img_src in raw_imgs:
             img_src = img_src.strip()
-            # Clean protocol relative URLs
             if img_src.startswith("//"):
                 img_src = "https:" + img_src
             elif img_src.startswith("/"):
                 base = "https://www.pokebeach.com" if "pokebeach" in domain.lower() else "https://www.pokeguardian.com"
                 img_src = base + img_src
 
-            # Filter out non-card images (logos, icons, gravatars, trackers)
             lower = img_src.lower()
             if any(ign in lower for ign in ["logo", "avatar", "gravatar", "icon", "banner", "button", "ads", "pixel", "facebook", "twitter", "footer"]):
                 continue
 
-            # Must be a substantive image
             if img_src not in found_images:
                 found_images.append(img_src)
 
     except Exception as e:
-        print(f"Error scraping article images from {article_url}: {e}")
+        print(f"Error scraping images from {article_url}: {e}")
 
     return found_images
 
 def build_dynamic_story_from_live_news():
-    """Finds the latest live article that contains real, matching card/product photos."""
     posted_log = "posted_news.txt"
     posted = set()
     if os.path.exists(posted_log):
@@ -136,18 +130,15 @@ def build_dynamic_story_from_live_news():
                 print(f"Checking article: {raw_title}")
                 article_images = scrape_exact_article_images(link, source["name"])
                 
-                # Must have at least 1 authentic photo from the article
                 if not article_images:
                     print(f"No direct card scans in {link}, checking next...")
                     continue
 
-                # Record as posted
                 with open(posted_log, "a") as f:
                     f.write(link + "\n")
 
-                print(f"Successfully extracted {len(article_images)} photos from article: {article_images[:3]}")
+                print(f"Extracted photos from article: {article_images[:3]}")
 
-                # Distribute article images across scenes
                 img1 = article_images[0]
                 img2 = article_images[1] if len(article_images) > 1 else img1
                 img3 = article_images[2] if len(article_images) > 2 else img2
@@ -220,7 +211,7 @@ def build_dynamic_story_from_live_news():
             print(f"Error checking {source['name']}: {e}")
             continue
 
-    raise Exception("No fresh articles with scrapable card images found right now. Check back shortly!")
+    raise Exception("No fresh articles with scrapable card images found. Check back shortly!")
 
 def render_native_scene_slide(scene, out_path):
     img = Image.new("RGB", (W, H), (10, 10, 14))
@@ -231,21 +222,17 @@ def render_native_scene_slide(scene, out_path):
         with open("temp_raw.png", "wb") as f:
             f.write(pdata)
         raw = Image.open("temp_raw.png").convert("RGB")
-        
-        # Fit image cleanly in top hero section (Card Ladder layout)
         raw.thumbnail((1020, 1160), Image.Resampling.LANCZOS)
         rw, rh = raw.size
         img.paste(raw, ((W - rw) // 2, 40))
     except Exception as e:
         print(f"Error loading image {scene['img_url']}: {e}")
 
-    # Gradient fade behind text
     for y in range(980, 1260):
         t = (y - 980) / 280
         alpha = int(255 * t)
         draw.line([(0, y), (W, y)], fill=(10, 10, 14, alpha))
 
-    # Red Alert Pill Badge
     tag_text = scene["tag"]
     a_font = get_font(52)
     abox = draw.textbbox((0, 0), tag_text, font=a_font)
@@ -325,7 +312,7 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
         for v in scene_vids:
             f.write(f"file '{v}'\n")
 
-    # Audio rotation from your audio/ folder
+    # Detect all uploaded audio in audio/ folder or root
     audio_candidates = glob.glob("audio/*.mp3") + glob.glob("audio/*.wav") + glob.glob("*.mp3")
     audio_candidates = [f for f in audio_candidates if f not in ["bg_audio.mp3", "pokemon_beat.mp3"]]
 
