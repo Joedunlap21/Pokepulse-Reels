@@ -23,7 +23,7 @@ BROADCAST_AUDIO_TRACKS = [
     "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
 ]
 
-# 100% FACT-CHECKED, AUTHENTIC POKÉMON NEWS DOCUMENTARIES
+# 100% FACT-CHECKED, AUTHENTIC POKÉMON NEWS STORIES
 FACT_CHECKED_STORIES = [
     {
         "story_id": "illustrator_pikachu_record",
@@ -241,7 +241,6 @@ def get_font(size):
             pass
     return ImageFont.load_default()
 
-# DYNAMIC TEXT AUTO-FITTER (Guarantees Perfect Margins)
 def draw_autofit_text(draw, text, y, max_w=980, target_size=155, min_size=55, fill="white", stroke_fill="#000000", stroke_width=8):
     if not text:
         return y
@@ -265,7 +264,6 @@ def draw_autofit_text(draw, text, y, max_w=980, target_size=155, min_size=55, fi
     draw.text((x, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
     return y + h - 6
 
-# DYNAMIC READING PACE CALCULATOR (Duration based on word count)
 def calculate_reading_duration(scene):
     words = sum(len(scene.get(f"line{i}", "").split()) for i in [1, 2, 3])
     calc_dur = 1.8 + (words * 0.28)
@@ -369,19 +367,20 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
         prepare_scene_base(sc["img_url"], sc["crop_mode"], base_img)
         create_story_overlay(sc, over_img)
 
+        # Scale 2160:-1 uses 90% less memory while keeping crisp 4K fidelity
         if sc["motion"] == "zoom_in":
             filter_str = (
-                f"[0:v]scale=8000:-1,zoompan=z='min(zoom+0.0016,1.15)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
+                f"[0:v]scale=2160:-1,zoompan=z='min(zoom+0.0015,1.12)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
                 "[bg][1:v]overlay=0:0[out]"
             )
         elif sc["motion"] == "pan_right":
             filter_str = (
-                f"[0:v]scale=8000:-1,zoompan=z='1.10':x='(on/{frames_count})*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
+                f"[0:v]scale=2160:-1,zoompan=z='1.08':x='(on/{frames_count})*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
                 "[bg][1:v]overlay=0:0[out]"
             )
         else:
             filter_str = (
-                f"[0:v]scale=8000:-1,zoompan=z='1.10':x='(1-on/{frames_count})*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
+                f"[0:v]scale=2160:-1,zoompan=z='1.08':x='(1-on/{frames_count})*(iw-iw/zoom)':y='ih/2-(ih/zoom/2)':d={frames_count}:s=1080x1920:fps=30[bg];"
                 "[bg][1:v]overlay=0:0[out]"
             )
 
