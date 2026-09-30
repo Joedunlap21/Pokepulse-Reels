@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import glob
 import random
 import subprocess
 import cloudinary
@@ -18,12 +19,7 @@ API_HEADERS = {
 }
 IG_USER_ID = "17841472317326348"
 
-# Real, Upbeat Royalty-Free Audio Tracks (Direct MP3 Downloads)
-AUDIO_TRACKS = [
-    "https://actions.google.com/sounds/v1/cartoon/wood_whistle_bounce.ogg",
-    "https://raw.githubusercontent.com/rafaelreis-hotmart/Audio-Sample-files/master/sample.mp3"
-]
-
+# Tier-1 Reliable Pokémon News RSS Feeds
 NEWS_SOURCES = [
     {"name": "POKEBEACH", "rss": "https://www.pokebeach.com/feed", "badge": "BREAKING NEWS"},
     {"name": "POKEGUARDIAN", "rss": "https://www.pokeguardian.com/rss.xml", "badge": "SET REVEAL"}
@@ -395,19 +391,27 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
         for v in scene_vids:
             f.write(f"file '{v}'\n")
 
-    audio_file = "bg_audio.mp3"
-    try:
-        r = requests.get(random.choice(AUDIO_TRACKS), headers=API_HEADERS, timeout=8)
-        with open(audio_file, "wb") as f:
-            f.write(r.content)
-    except Exception:
+    # Rotate through local audio folder if files exist
+    audio_candidates = glob.glob("audio/*.mp3") + glob.glob("audio/*.wav") + glob.glob("*.mp3")
+    # Exclude system files
+    audio_candidates = [f for f in audio_candidates if f not in ["bg_audio.mp3", "pokemon_beat.mp3"]]
+
+    if audio_candidates:
+        selected_audio = random.choice(audio_candidates)
+        print(f"Using selected soundtrack: {selected_audio}")
+        audio_file = selected_audio
+    else:
+        # High reliability uncompressed WAV fallback
+        audio_file = "bg_audio.wav"
         subprocess.run([
             "ffmpeg", "-y", "-f", "lavfi",
-            f"-i", f"sine=frequency=220:duration={total_duration}",
-            "-c:a", "libmp3lame", audio_file
+            "-i", f"sine=frequency=220:sample_rate=44100",
+            "-t", str(total_duration),
+            "-c:a", "pcm_s16le",
+            audio_file
         ], check=True)
 
-    fade_start = round(total_duration - 1.2, 2)
+    fade_start = max(0.5, round(total_duration - 1.2, 2))
     subprocess.run([
         "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "playlist.txt",
         "-stream_loop", "-1", "-i", audio_file,
