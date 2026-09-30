@@ -395,14 +395,12 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
         for v in scene_vids:
             f.write(f"file '{v}'\n")
 
-    # Download authentic upbeat audio track directly
     audio_file = "bg_audio.mp3"
     try:
         r = requests.get(random.choice(AUDIO_TRACKS), headers=API_HEADERS, timeout=8)
         with open(audio_file, "wb") as f:
             f.write(r.content)
     except Exception:
-        # Fallback to pure sine beep tone if network blocks
         subprocess.run([
             "ffmpeg", "-y", "-f", "lavfi",
             f"-i", f"sine=frequency=220:duration={total_duration}",
