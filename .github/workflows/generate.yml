@@ -10,8 +10,8 @@ on:
         type: choice
         options: ['', 'news', 'drops', 'sales', 'bulk']
   schedule:
-    - cron: '0 13,17,1 * * *'
-    - cron: '30 21 * * *'
+    # Times are UTC. 9:30am, 12:30pm, 5:30pm, 9:30pm Eastern (daylight time)
+    - cron: '30 13,16,21,1 * * *'
 
 jobs:
   render_and_post_reel:
