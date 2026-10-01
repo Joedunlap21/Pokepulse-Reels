@@ -2,6 +2,13 @@ name: PokePulse Auto Reels
 
 on:
   workflow_dispatch:
+    inputs:
+      topic:
+        description: 'Topic to post (leave blank = automatic by time of day)'
+        required: false
+        default: ''
+        type: choice
+        options: ['', 'news', 'drops', 'sales', 'bulk']
   schedule:
     - cron: '0 13,17,1 * * *'
     - cron: '30 21 * * *'
@@ -31,4 +38,6 @@ jobs:
           CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          POKEMONTCG_API_KEY: ${{ secrets.POKEMONTCG_API_KEY }}
+          REEL_TOPIC: ${{ github.event.inputs.topic }}
         run: python main.py
