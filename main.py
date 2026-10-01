@@ -110,7 +110,8 @@ def draw_lines(draw, lines, font, stroke, line_h, top, colors):
 
 def calculate_reading_duration(scene):
     words = len(scene.get("text", "").split()) + len(scene.get("sub", "").split())
-    return round(max(2.6, min(1.4 + words * 0.32, 6.0)), 2)
+    # shorter slides: ~2s for a headline, max 4s for the longest text
+    return round(max(1.8, min(0.9 + words * 0.2, 4.0)), 2)
 
 # ---------------------------------------------------------------- sources
 
@@ -495,12 +496,12 @@ def topic_for_now():
         return forced
     h = datetime.now(timezone.utc).hour
     if 12 <= h <= 15:
-        return "news"      # 9am ET run
+        return "news"      # 9:30am ET run
     if 16 <= h <= 19:
-        return "drops"     # 1pm ET run
+        return "drops"     # 12:30pm ET run
     if 20 <= h <= 23:
         return "sales"     # 5:30pm ET run
-    return "bulk"          # 9pm ET run
+    return "bulk"          # 9:30pm ET run
 
 def build_story():
     posted = set()
@@ -632,7 +633,7 @@ def render_motion_clip(bg_path, txt_path, dur, out_vid, zoom_in=True):
     if txt_path:
         inputs += ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", txt_path]
         fc = (f"[0]scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps=30[bg];"
-              f"[1]format=rgba,fade=t=in:st=0.1:d=0.35:alpha=1[tx];"
+              f"[1]format=rgba,fade=t=in:st=0.05:d=0.25:alpha=1[tx];"
               f"[bg][tx]overlay=0:0,format=yuv420p[v]")
     else:
         fc = (f"[0]scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps=30,"
@@ -655,7 +656,7 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
         render_motion_clip(f"bg_{idx+1}.png", f"txt_{idx+1}.png", dur, out_vid, zoom_in=(idx % 2 == 0))
         scene_vids.append(out_vid)
 
-    cta_dur = 2.8
+    cta_dur = 2.2
     total_duration += cta_dur
     print(f"Rendering newsletter CTA ({cta_dur}s)...")
     make_cta_slide("f_cta.png")
