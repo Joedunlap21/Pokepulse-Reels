@@ -1,14 +1,17 @@
 import os
 import re
+import sys
+import html
 import time
 import glob
 import random
 import subprocess
+from datetime import datetime, timezone, timedelta
+
 import cloudinary
 import cloudinary.uploader
 import requests
-import xml.etree.ElementTree as ET
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 cloudinary.config(
     cloudinary_url=os.getenv("CLOUDINARY_URL", "").strip()
@@ -17,442 +20,696 @@ cloudinary.config(
 API_HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 }
-IG_USER_ID = "17841472317326348"
+# Uses the IG_USER_ID secret if it's set, otherwise the @card.stax account ID below
+IG_USER_ID = os.getenv("IG_USER_ID", "").strip() or "17841472317326348"
+GRAPH = "https://graph.facebook.com/v21.0"
 
-NEWS_SOURCES = [
-    {"name": "POKEBEACH", "rss": "https://www.pokebeach.com/feed", "badge": "BREAKING NEWS"},
-    {"name": "POKEGUARDIAN", "rss": "https://www.pokeguardian.com/rss.xml", "badge": "SET REVEAL"}
-]
+MAX_ARTICLE_AGE_DAYS = 10
 
 W, H = 1080, 1920
+BG = (10, 10, 14)
+YELLOW, WHITE, GREEN, RED = "#FFE600", "#FFFFFF", "#00FF66", "#E50914"
+
+IMG_BOTTOM = 1110   # art area is 0..IMG_BOTTOM
+TAG_Y = 1130        # red tag pill
+TEXT_TOP = 1230     # text block starts here
+TEXT_BOTTOM = 1860  # and must end above here
+TEXT_MAX_W = 960
+
+# ---------------------------------------------------------------- fonts
 
 def ensure_font():
     if not os.path.exists("BebasNeue.ttf"):
         url = "https://raw.githubusercontent.com/google/fonts/main/ofl/bebasneue/BebasNeue-Regular.ttf"
-        r = requests.get(url, headers=API_HEADERS)
+        r = requests.get(url, headers=API_HEADERS, timeout=20)
         with open("BebasNeue.ttf", "wb") as f:
             f.write(r.content)
 
 ensure_font()
 
+_font_cache = {}
 def get_font(size):
-    if os.path.exists("BebasNeue.ttf"):
+    if size not in _font_cache:
         try:
-            return ImageFont.truetype("BebasNeue.ttf", size)
+            _font_cache[size] = ImageFont.truetype("BebasNeue.ttf", size)
         except Exception:
-            pass
-    return ImageFont.load_default()
+            _font_cache[size] = ImageFont.load_default()
+    return _font_cache[size]
 
-def draw_autofit_text(draw, text, y, max_w=980, target_size=155, min_size=55, fill="white", stroke_fill="#000000", stroke_width=8):
-    if not text:
-        return y
+def clean_text(t):
+    t = html.unescape(t or "")
+    t = t.replace("’", "'").replace("‘", "'").replace("“", '"').replace("”", '"')
+    t = t.replace("–", "-").replace("—", "-").replace("\xa0", " ")
+    # strip emojis / symbols the font can't draw
+    t = "".join(ch for ch in t if ord(ch) < 0x2000)
+    t = re.sub(r"\s+", " ", t).strip()
+    return re.sub(r"\s+([,.!?;:])", r"\1", t)
 
-    curr_size = target_size
-    font = get_font(curr_size)
+# ---------------------------------------------------------------- text layout
 
-    while curr_size > min_size:
-        bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
-        w = bbox[2] - bbox[0]
-        if w <= max_w:
-            break
-        curr_size -= 3
-        font = get_font(curr_size)
+def text_w(draw, text, font, stroke=0):
+    b = draw.textbbox((0, 0), text, font=font, stroke_width=stroke)
+    return b[2] - b[0]
 
-    bbox = draw.textbbox((0, 0), text, font=font, stroke_width=stroke_width)
-    w = bbox[2] - bbox[0]
-    h = bbox[3] - bbox[1]
-    x = (W - w) // 2
+def wrap_words(draw, text, font, max_w, stroke):
+    lines, cur = [], ""
+    for word in text.split():
+        trial = (cur + " " + word).strip()
+        if text_w(draw, trial, font, stroke) <= max_w or not cur:
+            cur = trial
+        else:
+            lines.append(cur)
+            cur = word
+    if cur:
+        lines.append(cur)
+    return lines
 
-    draw.text((x, y), text, font=font, fill=fill, stroke_fill=stroke_fill, stroke_width=stroke_width)
-    return y + h - 6
+def fit_block(draw, text, max_w, max_h, start=150, min_size=58, max_lines=5):
+    """Biggest font size where the whole text wraps inside the box. Never cuts words."""
+    size = start
+    while True:
+        font = get_font(size)
+        stroke = max(4, size // 18)
+        lines = [l for part in text.split("\n") for l in wrap_words(draw, part, font, max_w, stroke)]
+        line_h = int(size * 0.98)
+        widest = max(text_w(draw, l, font, stroke) for l in lines)
+        parts = text.split("\n")
+        one_per_line = len(parts) == 1 or len(lines) == len(parts)  # lists: keep each item on its own line
+        if (len(lines) <= max_lines and len(lines) * line_h <= max_h and widest <= max_w and one_per_line) or size <= min_size:
+            return font, stroke, lines, line_h
+        size -= 4
+
+def draw_lines(draw, lines, font, stroke, line_h, top, colors):
+    y = top
+    for i, line in enumerate(lines):
+        x = (W - text_w(draw, line, font, stroke)) // 2
+        draw.text((x, y), line, font=font, fill=colors[i % len(colors)],
+                  stroke_fill="#000000", stroke_width=stroke)
+        y += line_h
+    return y
 
 def calculate_reading_duration(scene):
-    words = sum(len(scene.get(f"line{i}", "").split()) for i in [1, 2, 3])
-    calc_dur = 1.8 + (words * 0.28)
-    return round(max(2.4, min(calc_dur, 4.2)), 2)
+    words = len(scene.get("text", "").split()) + len(scene.get("sub", "").split())
+    return round(max(2.6, min(1.4 + words * 0.32, 6.0)), 2)
 
-def fetch_headline_matched_cards(headline):
-    """Finds official high-res card scans matching the exact Pokémon named in the headline."""
-    clean = re.sub(r'[^a-zA-Z0-9\s]', '', headline)
-    ignore = ["pokemon", "cards", "expansion", "revealed", "tcg", "official", "promo", "release", "set", "pack", "collection"]
-    words = [w for w in clean.split() if len(w) > 3 and w.lower() not in ignore]
-    keyword = words[0] if words else "Charizard"
+# ---------------------------------------------------------------- sources
 
-    print(f"Searching TCG API for headline keyword: {keyword}")
-    url = f"https://api.pokemontcg.io/v2/cards?q=name:{keyword}*&pageSize=4"
+# The bot rotates 4 topics:  news | drops | sales | bulk
+#   news  = latest Pokemon TCG news from the 4 outlets below
+#   drops = latest preorder / release / retailer drop article (where, when, price, what's inside)
+#   sales = big card sales, PSA 10 / graded auction records
+#   bulk  = "Bulk Gold": commons & uncommons from a recent set that are worth real money (TCGplayer prices)
+SOURCES = [
+    {"name": "Pokemon.com", "list": "https://www.pokemon.com/us/news", "base": "https://www.pokemon.com",
+     "link_re": r'href="((?:https://www\.pokemon\.com)?/us/news/[a-z0-9\-]+)"',
+     "start": "<article", "end": ["</article>"]},
+    {"name": "PokeBeach", "list": "https://www.pokebeach.com/", "base": "https://www.pokebeach.com",
+     "link_re": r'href="(https://www\.pokebeach\.com/20\d\d/\d\d/[a-z0-9\-]+)/?"',
+     "start": "entry-content", "end": ["launched PokeBeach", 'class="author', "is a fansite"]},
+    {"name": "PokeGuardian", "list": "https://www.pokeguardian.com/", "base": "https://www.pokeguardian.com",
+     "link_re": r'href="(https://www\.pokeguardian\.com/\d+_[a-z0-9\-]+)"',
+     "start": "<main", "end": ["</main>"]},
+    {"name": "Dexerto", "rss": "https://www.dexerto.com/feed/category/pokemon/", "base": "https://www.dexerto.com",
+     "start": "<article", "end": ["</article>"], "max_imgs": 2},  # rest are related-article thumbnails
+]
+PER_SOURCE = 6
+
+TCG_WORDS = ["tcg", "card", "booster", "elite trainer", "expansion", "promo", "collection", "pack", "prerelease",
+             "pokemon center", "psa", "graded", "auction", "tin", "binder", "set list", "pull rate", "illustration rare",
+             "special illustration", "bundle", "sealed"]
+DROP_WORDS = ["preorder", "pre-order", "now available", "now live", "releases", "release date", "launch", "in stores",
+              "restock", "exclusive", "pokemon center", "gamestop", "best buy", "target", "walmart", "costco",
+              "elite trainer box", "booster bundle", "booster box", "collection", "tin", "gift with purchase", "msrp"]
+SALE_WORDS = ["sold for", "sells for", "sale", "auction", "psa 10", "psa", "gem mint", "graded", "record",
+              "most expensive", "million", "bids", "cgc", "bgs"]
+RETAILERS = ["Pokemon Center", "GameStop", "Best Buy", "Target", "Walmart", "Costco", "Sam's Club", "Amazon",
+             "Barnes & Noble", "Five Below", "Hot Topic", "BoxLunch", "Macy's", "EB Games", "JB Hi-Fi", "Meijer",
+             "Walgreens", "CVS", "Dollar General", "McDonald's", "Play! Pokemon Stores", "local game stores"]
+MONTHS = r"(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan\.?|Feb\.?|Mar\.?|Apr\.?|Jun\.?|Jul\.?|Aug\.?|Sept?\.?|Oct\.?|Nov\.?|Dec\.?)"
+JUNK = ["open media", "tap to unmute", "follow along with the video", "this feature may not be available",
+        "launched pokebeach", "is a fansite", "follow us", "thank you very much", "patreon", "subscribe",
+        "click here", "sign up", "newsletter", "cookie", "yesterday at", "{\"@", "please make sure",
+        "we do not know", "no information"]
+
+def get_html(url):
+    r = requests.get(url, headers=API_HEADERS, timeout=15)
+    r.raise_for_status()
+    return r.text
+
+def meta_all(page, prop):
+    pat = r'<meta[^>]+(?:property|name)="%s"[^>]*content="([^"]*)"' % re.escape(prop)
+    out = [html.unescape(m) for m in re.findall(pat, page, re.I)]
+    pat2 = r'<meta[^>]+content="([^"]*)"[^>]*(?:property|name)="%s"' % re.escape(prop)
+    return out + [html.unescape(m) for m in re.findall(pat2, page, re.I)]
+
+def parse_date(s):
+    if not s:
+        return None
+    s = s.strip()
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        pass
+    try:
+        from email.utils import parsedate_to_datetime
+        return parsedate_to_datetime(s)
+    except Exception:
+        return None
+
+def list_source(src):
+    """Newest article links for one outlet: [(url, rss_date_or_None)]"""
+    if "rss" in src:
+        xml = get_html(src["rss"])
+        out = []
+        for item in re.findall(r"<item>(.*?)</item>", xml, re.S)[:PER_SOURCE]:
+            link = re.search(r"<link>(.*?)</link>", item, re.S)
+            date = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
+            if link:
+                out.append((link.group(1).strip(), parse_date(date.group(1)) if date else None))
+        return out
+    page = get_html(src["list"])
+    seen, out = set(), []
+    for u in re.findall(src["link_re"], page):
+        if u.startswith("/"):
+            u = src["base"] + u
+        u = u.rstrip("/")
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    if src["name"] == "PokeGuardian":  # its homepage pins old posts; the id in the URL is the real order
+        out.sort(key=lambda u: int(re.search(r"/(\d+)_", u).group(1)), reverse=True)
+    return [(u, None) for u in out[:PER_SOURCE]]
+
+def full_size(u):
+    u = html.unescape(u)
+    if u.startswith("//"):
+        u = "https:" + u
+    u = re.sub(r"-\d{2,4}x\d{2,4}(?=\.(?:jpe?g|png|webp)$)", "", u.split("?")[0]) if "pokebeach.com" in u else u
+    return u.replace("-standard.", "-high.")
+
+def good_image(u):
+    low = u.lower()
+    return u.startswith("http") and not any(b in low for b in [
+        "footer", "logo", "avatar", "icon", "banner", "button", "/amyt6x/", "forums/data", "water%20pokemon",
+        "gravatar", "pixel", "facebook", "twitter", ".svg", "emoji", "ads."])
+
+def split_sentences(text):
+    parts = re.split(r"(?<=[.!?])\s+(?=[A-Z0-9\"'$])", text)
+    return [p.strip() for p in parts if p.strip()]
+
+_article_cache = {}
+def parse_article(src, url, rss_date=None):
+    if url in _article_cache:
+        return _article_cache[url]
+    page = get_html(url)
+    i = page.find(src["start"])
+    seg = page[i:] if i >= 0 else page
+    ends = [seg.find(e) for e in src["end"] if seg.find(e) > 0]
+    if ends:
+        seg = seg[:min(ends)]
+
+    og_t = meta_all(page, "og:title")
+    h1 = re.findall(r"<h1[^>]*>(.*?)</h1>", page, re.S)
+    title = clean_text(re.sub(r"<[^>]+>", " ", h1[0])) if h1 else ""
+    if og_t and (not title or len(title) > 160):
+        title = clean_text(og_t[0])
+    title = re.split(r"\s+[|\-–]\s+(?:PokeBeach|PokeGuardian|Pokemon\.com|Dexerto)", title)[0].strip()
+
+    desc = clean_text((meta_all(page, "og:description") or [""])[0])
+
+    published = rss_date
+    for cand in meta_all(page, "article:published_time") + re.findall(r'"datePublished"\s*:\s*"([^"]+)"', page) \
+            + meta_all(page, "pkm-modified-date"):
+        published = published or parse_date(cand)
+
+    paras, items = [], []
+    for tag, inner in re.findall(r"<(p|li)[^>]*>(.*?)</\1>", seg, re.S):
+        t = clean_text(re.sub(r"<[^>]+>", " ", inner))
+        low = t.lower()
+        if not t or any(j in low for j in JUNK):
+            continue
+        if tag == "li":
+            if len(t.split()) >= 2 and not re.fullmatch(r"[#\d\s:]+", t) and len(t) < 140:
+                items.append(t)
+        elif len(t.split()) >= 5:
+            paras.append(t)
+
     images = []
-    try:
-        r = requests.get(url, headers=API_HEADERS, timeout=8).json()
-        for card in r.get("data", []):
-            img = card.get("images", {}).get("large") or card.get("images", {}).get("small")
-            if img and img not in images:
-                images.append(img)
-    except Exception as e:
-        print(f"TCG API search notice: {e}")
+    for u in meta_all(page, "og:image") + re.findall(r'<img[^>]+(?:data-src|src)="([^"]+)"', seg):
+        u = full_size(u)
+        if u.startswith("/"):
+            u = src["base"] + u
+        if good_image(u) and u.split("?")[0] not in [x.split("?")[0] for x in images]:
+            images.append(u)
 
-    # Fallback to high-value chase cards if API has no results
-    chase = [
-        "https://images.pokemontcg.io/swsh7/215_hires.png",
-        "https://images.pokemontcg.io/col1/22_hires.png",
-        "https://images.pokemontcg.io/sv3pt5/199_hires.png",
-        "https://images.pokemontcg.io/swsh8/269_hires.png"
-    ]
-    for c in chase:
-        if len(images) < 4 and c not in images:
-            images.append(c)
-    return images[:4]
+    art = {"source": src["name"], "url": url, "title": title, "desc": desc, "paras": paras,
+           "items": items, "images": images[:src.get("max_imgs", 4)], "published": published}
+    _article_cache[url] = art
+    return art
 
-def scrape_exact_article_images(article_url, domain, headline):
-    """Pulls images directly from the article, or resolves matching card scans for the headline."""
-    found_images = []
-    try:
-        r = requests.get(article_url, headers=API_HEADERS, timeout=10)
-        if r.status_code == 200:
-            html = r.text
-            raw_imgs = re.findall(r'<img[^>]+(?:src|data-src|data-lazy-src)=["\']([^"\']+\.(?:png|jpg|jpeg))["\']', html, re.I)
-            for img_src in raw_imgs:
-                img_src = img_src.strip()
-                if img_src.startswith("//"):
-                    img_src = "https:" + img_src
-                elif img_src.startswith("/"):
-                    base = "https://www.pokebeach.com" if "pokebeach" in domain.lower() else "https://www.pokeguardian.com"
-                    img_src = base + img_src
+def all_sentences(art):
+    out = []
+    for para in [art["desc"]] + art["paras"]:
+        for s in split_sentences(para):
+            if s[-1:] in ".!?" and 5 <= len(s.split()) <= 32 and s not in out \
+                    and s.rstrip(".!?").lower() != art["title"].lower():
+                out.append(s)
+    return out
 
-                lower = img_src.lower()
-                if any(ign in lower for ign in ["logo", "avatar", "gravatar", "icon", "banner", "button", "ads", "pixel", "facebook", "twitter"]):
-                    continue
-                if img_src not in found_images:
-                    found_images.append(img_src)
-    except Exception as e:
-        print(f"Notice scraping {article_url}: {e}")
+def word_hits(text, words):
+    low = text.lower()
+    return sum(1 for w in words if w in low)
 
-    # If the article has fewer than 2 images, supplement with headline-matched card scans
-    if len(found_images) < 2:
-        matched = fetch_headline_matched_cards(headline)
-        for m in matched:
-            if m not in found_images:
-                found_images.append(m)
-
-    return found_images[:4]
-
-def build_dynamic_story_from_live_news():
-    posted_log = "posted_news.txt"
-    posted = set()
-    if os.path.exists(posted_log):
-        with open(posted_log, "r") as f:
-            posted = set(line.strip() for line in f if line.strip())
-
-    for source in NEWS_SOURCES:
+def gather_articles():
+    """Parsed, recent, TCG-relevant articles from all outlets, newest first."""
+    cutoff = datetime.now(timezone.utc) - timedelta(days=MAX_ARTICLE_AGE_DAYS)
+    arts = []
+    for src in SOURCES:
         try:
-            r = requests.get(source["rss"], headers=API_HEADERS, timeout=12)
-            if r.status_code != 200:
-                continue
-            root = ET.fromstring(r.content)
-            channel = root.find("channel")
-            if channel is None:
-                continue
-
-            for item in channel.findall("item"):
-                link = item.find("link").text.strip() if item.find("link") is not None else ""
-                if link in posted:
-                    continue
-
-                raw_title = item.find("title").text.strip() if item.find("title") is not None else "BREAKING POKÉMON NEWS"
-                desc = item.find("description").text if item.find("description") is not None else ""
-                clean_desc = re.sub(r'<[^>]+>', '', desc).strip()
-
-                print(f"Scraping story for: {raw_title}")
-                article_images = scrape_exact_article_images(link, source["name"], raw_title)
-
-                with open(posted_log, "a") as f:
-                    f.write(link + "\n")
-
-                print(f"Using {len(article_images)} matching images: {article_images}")
-
-                img1 = article_images[0]
-                img2 = article_images[1] if len(article_images) > 1 else img1
-                img3 = article_images[2] if len(article_images) > 2 else img2
-                img4 = article_images[3] if len(article_images) > 3 else img1
-
-                words = raw_title.upper().split()
-                half = max(1, len(words) // 2)
-                t1 = " ".join(words[:half])
-                t2 = " ".join(words[half:])
-
-                story = {
-                    "story_id": raw_title[:30],
-                    "scenes": [
-                        {
-                            "tag": source["badge"],
-                            "img_url": img1,
-                            "crop_mode": "center",
-                            "line1": t1,
-                            "line1_color": "#FFE600",
-                            "line2": t2,
-                            "line2_color": "#FFFFFF",
-                            "line3": "POKEPULSE EXCLUSIVE",
-                            "line3_color": "#00FF66"
-                        },
-                        {
-                            "tag": source["name"],
-                            "img_url": img2,
-                            "crop_mode": "center",
-                            "line1": "OFFICIAL REVEAL",
-                            "line1_color": "#FFE600",
-                            "line2": "DETAILS CONFIRMED",
-                            "line2_color": "#FFFFFF",
-                            "line3": "CHECKING THE SPECS",
-                            "line3_color": "#00FF66"
-                        },
-                        {
-                            "tag": "MARKET IMPACT",
-                            "img_url": img3,
-                            "crop_mode": "center",
-                            "line1": "CHASE CARDS ALERT",
-                            "line1_color": "#FFFFFF",
-                            "line2": "PRICING & RESTOCKS",
-                            "line2_color": "#FFE600",
-                            "line3": "COLLECTOR DEMAND",
-                            "line3_color": "#00FF66"
-                        },
-                        {
-                            "tag": "POKEPULSE VERDICT",
-                            "img_url": img4,
-                            "crop_mode": "center",
-                            "line1": "FULL BREAKDOWN",
-                            "line1_color": "#FFE600",
-                            "line2": "IN CAPTION BELOW",
-                            "line2_color": "#FFFFFF",
-                            "line3": "STAY AHEAD OF RESTOCKS",
-                            "line3_color": "#00FF66"
-                        }
-                    ],
-                    "caption_full": (
-                        f"🚨 {source['badge']} | {raw_title}!\n\n"
-                        f"Official Report via {source['name']}:\n"
-                        f"{clean_desc[:280]}\n\n"
-                        f"What are your thoughts on this drop? Drop your reaction below! 👇\n\n"
-                        f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-                        f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokeBeach #PokemonNews"
-                    )
-                }
-                return story
+            links = list_source(src)
         except Exception as e:
-            print(f"Error checking {source['name']}: {e}")
+            print(f"[{src['name']}] list failed: {e}")
+            continue
+        print(f"[{src['name']}] {len(links)} links")
+        for url, d in links:
+            try:
+                a = parse_article(src, url, d)
+            except Exception as e:
+                print(f"  skip {url}: {e}")
+                continue
+            if not a["title"] or not a["images"]:
+                continue
+            if a["published"] and a["published"] < cutoff:
+                continue
+            blob = " ".join([a["title"], a["desc"]] + a["paras"][:4])
+            if word_hits(blob, TCG_WORDS) == 0:
+                continue  # skip non-card stuff (Pokemon GO events, video games...)
+            arts.append(a)
+    far_past = datetime(2000, 1, 1, tzinfo=timezone.utc)
+    arts.sort(key=lambda a: a["published"] or far_past, reverse=True)
+    return arts
+
+def already_posted(title, posted, captions):
+    t = (title or "").lower()
+    return t in posted or (bool(t) and any(t in c for c in captions))
+
+def recent_ig_captions():
+    token = os.getenv("IG_ACCESS_TOKEN", "").strip()
+    if not token:
+        return []
+    try:
+        r = requests.get(f"{GRAPH}/{IG_USER_ID}/media",
+                         params={"fields": "caption", "limit": 100, "access_token": token}, timeout=15).json()
+        return [(m.get("caption") or "").lower() for m in r.get("data", [])]
+    except Exception as e:
+        print(f"Couldn't read recent IG posts: {e}")
+        return []
+
+# ---------------------------------------------------------------- topic: news / sales
+
+def fit_list(parts, max_words=26):
+    out = []
+    for p in parts:
+        if len(" ".join(out + [p]).split()) > max_words:
+            break
+        out.append(p)
+    return out
+
+def build_article_story(art, kind):
+    sents = all_sentences(art)
+    if kind == "sales":
+        money = [s for s in sents if "$" in s or "psa" in s.lower() or "million" in s.lower()]
+        details = (money + [s for s in sents if s not in money])[:3]
+        first_tag, tags = "BIG SALE ALERT", ["THE SALE", "THE DETAILS", "WHY IT MATTERS"]
+    else:
+        details = sents[:3]
+        first_tag, tags = "BREAKING NEWS", ["THE DETAILS", "WHAT TO KNOW", "KEY INFO"]
+    if not details:
+        return None
+    imgs = art["images"]
+    scenes = [{"tag": first_tag, "img_url": imgs[0], "text": art["title"].upper(),
+               "colors": [YELLOW, WHITE], "sub": "POKEPULSE EXCLUSIVE"}]
+    for i, s in enumerate(details):
+        scenes.append({"tag": tags[i], "img_url": imgs[(i + 1) % len(imgs)], "text": s.upper(),
+                       "colors": [WHITE, YELLOW] if i % 2 == 0 else [YELLOW, WHITE]})
+    return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
+            "caption_full": article_caption(art, sents)}
+
+def article_caption(art, sents, lead="🚨"):
+    text = ""
+    for s in sents:
+        if len(text) + len(s) + 1 > 900:
+            break
+        text = (text + " " + s).strip()
+    return (f"{lead} {art['title']}\n\n{text}\n\nSource: {art['source']}\n\n"
+            f"What are your thoughts on this? Drop your reaction below! 👇\n\n"
+            f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
+            f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews")
+
+# ---------------------------------------------------------------- topic: drops
+
+def build_drop_story(art):
+    sents = all_sentences(art)
+    blob = " ".join([art["title"], art["desc"]] + art["paras"] + art["items"])
+    lowblob = blob.lower().replace("pokémon", "pokemon")
+    where = [r for r in RETAILERS if r.lower() in lowblob]
+    when = [s for s in sents if re.search(MONTHS + r"\s+\d{1,2}", s)]
+    price = [s for s in sents if re.search(r"\$\s?\d", s)] + [i for i in art["items"] if re.search(r"\$\s?\d", i)]
+    inside = [s for s in sents if re.search(r"\b(contains?|includes?|comes with|booster packs?|promo cards?)\b", s, re.I)]
+    products = [i for i in art["items"] if re.search(r"box|bundle|tin|collection|pack|blister|binder|limit|deck", i, re.I)]
+
+    imgs = art["images"]
+    scenes = [{"tag": "DROP REPORT", "img_url": imgs[0], "text": art["title"].upper(), "colors": [YELLOW, WHITE]}]
+    def add(tag, text, colors):
+        scenes.append({"tag": tag, "img_url": imgs[len(scenes) % len(imgs)], "text": text.upper(), "colors": colors})
+    if where:
+        add("WHERE", "\n".join(fit_list(where, 14)), [YELLOW, WHITE])
+    if when:
+        add("WHEN", when[0], [WHITE, YELLOW])
+    if products:
+        add("WHAT'S DROPPING", "\n".join(fit_list(products, 24)), [WHITE, YELLOW])
+    if price:
+        add("PRICE", " ".join(fit_list(price, 28)), [YELLOW, WHITE])
+    if inside:
+        add("WHAT'S INSIDE", inside[0], [WHITE, YELLOW])
+    if len(scenes) < 3:
+        return None  # not enough real drop facts in this article
+
+    lines = [f"🛒 DROP REPORT: {art['title']}", ""]
+    if where:
+        lines.append("📍 Where: " + ", ".join(where))
+    if when:
+        lines.append("📅 When: " + when[0])
+    if products:
+        lines.append("📦 Products: " + "; ".join(products[:8]))
+    if price:
+        lines.append("💲 Price: " + " ".join(price[:3]))
+    if inside:
+        lines.append("🎁 Inside: " + inside[0])
+    lines += ["", f"Source: {art['source']}", "",
+              "Which one are you grabbing? 👇", "",
+              "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+              "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
+    return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
+            "caption_full": "\n".join(lines)}
+
+# ---------------------------------------------------------------- topic: bulk gold
+
+TCG_API = "https://api.pokemontcg.io/v2"
+
+def tcg_get(path, params):
+    headers = dict(API_HEADERS)
+    key = os.getenv("POKEMONTCG_API_KEY", "").strip()
+    if key:
+        headers["X-Api-Key"] = key
+    for attempt in range(3):
+        try:
+            r = requests.get(f"{TCG_API}/{path}", params=params, headers=headers, timeout=30)
+            if r.status_code == 200:
+                return r.json()
+        except Exception as e:
+            print(f"pokemontcg.io retry {attempt+1}: {e}")
+        time.sleep(3)
+    return {}
+
+def best_market(card):
+    best, variant = 0.0, ""
+    for v, p in ((card.get("tcgplayer") or {}).get("prices") or {}).items():
+        m = (p or {}).get("market") or 0
+        if m > best:
+            best, variant = m, v
+    return best, variant
+
+VARIANT_NAMES = {"normal": "", "holofoil": "HOLO", "reverseHolofoil": "REVERSE HOLO",
+                 "1stEditionNormal": "1ST EDITION", "1stEditionHolofoil": "1ST EDITION HOLO"}
+
+def build_bulk_story(captions):
+    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 10}).get("data", [])
+    sets = [s for s in sets if (s.get("total") or 0) >= 60 and "promo" not in s.get("name", "").lower()]
+    for st in sets[:5]:
+        key = f"bulk gold: {st['name']}".lower()
+        if any(key in c for c in captions):
+            print(f"Bulk Gold already done for {st['name']}")
+            continue
+        cards = tcg_get("cards", {"q": f'set.id:{st["id"]} (rarity:Common OR rarity:Uncommon)',
+                                  "pageSize": 250,
+                                  "select": "id,name,number,rarity,images,set,tcgplayer"}).get("data", [])
+        ranked = []
+        for c in cards:
+            m, v = best_market(c)
+            img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
+            if m > 0 and img:
+                ranked.append((m, v, c, img))
+        ranked.sort(key=lambda x: -x[0])
+        top = ranked[:4]
+        if len(top) < 3 or top[0][0] < 1.0:
+            print(f"{st['name']}: no commons/uncommons worth $1+ yet")
             continue
 
-    # Fallback guaranteed story if feeds are temporarily unreachable
-    fallback_imgs = fetch_headline_matched_cards("Illustrator Pikachu")
-    return {
-        "story_id": "illustrator_pikachu_record",
-        "scenes": [
-            {
-                "tag": "AUCTION RECORD",
-                "img_url": fallback_imgs[0],
-                "crop_mode": "center",
-                "line1": "THE 5.27 MILLION USD",
-                "line1_color": "#FFE600",
-                "line2": "HOLY GRAIL PIKACHU",
-                "line2_color": "#FFFFFF",
-                "line3": "GUINNESS RECORD",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "1998 COROCORO",
-                "img_url": fallback_imgs[1],
-                "crop_mode": "center",
-                "line1": "NEVER SOLD IN PACKS",
-                "line1_color": "#FFE600",
-                "line2": "DRAWN BY ATSUKO NISHIDA",
-                "line2_color": "#FFFFFF",
-                "line3": "ORIGINAL CREATOR",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "POP REPORT",
-                "img_url": fallback_imgs[2],
-                "crop_mode": "center",
-                "line1": "ONLY 39 COPIES AWARDED",
-                "line1_color": "#FFFFFF",
-                "line2": "EXACTLY ONE PSA 10",
-                "line2_color": "#FFE600",
-                "line3": "CONFIRMED IN EXISTENCE",
-                "line3_color": "#00FF66"
-            },
-            {
-                "tag": "AUCTION VERDICT",
-                "img_url": fallback_imgs[3],
-                "crop_mode": "center",
-                "line1": "HIGHEST VALUED CARD",
-                "line1_color": "#FFE600",
-                "line2": "IN COLLECTING HISTORY",
-                "line2_color": "#FFFFFF",
-                "line3": "AN UNTOUCHABLE ICON",
-                "line3_color": "#00FF66"
-            }
-        ],
-        "caption_full": (
-            "🚨 AUCTION RECORD | THE 5.27 MILLION USD ILLUSTRATOR PIKACHU!\n\n"
-            "Facts Behind the Legend:\n"
-            "• Created in 1998 exclusively for 3 illustration contests in CoroCoro Comic.\n"
-            "• Drawn by Atsuko Nishida, the original creator of Pikachu.\n"
-            "• Only 39 official copies were awarded to winners worldwide.\n"
-            "• Certified by Guinness World Records as the most expensive Pokémon card ever sold at 5,275,000 USD.\n\n"
-            "Is Illustrator Pikachu the greatest collectible in modern history? Drop your thoughts below! 👇\n\n"
-            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
-            "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews"
-        )
-    }
+        updated = (top[0][2].get("tcgplayer") or {}).get("updatedAt", "")
+        scenes = [{"tag": "BULK GOLD", "img_url": top[0][3],
+                   "text": f"CHECK YOUR BULK! {st['name'].upper()} COMMONS & UNCOMMONS WORTH REAL MONEY",
+                   "colors": [YELLOW, WHITE]}]
+        cap = [f"💰 Bulk Gold: {st['name']} - don't toss these commons & uncommons!", ""]
+        for rank, (m, v, c, img) in enumerate(top, 1):
+            vname = VARIANT_NAMES.get(v, v.upper())
+            rarity = (c.get("rarity") or "").upper()
+            tag = f"#{rank}  {rarity}" + (f"  {vname}" if vname else "")
+            scenes.append({"tag": tag, "img_url": img, "text": c["name"].upper(),
+                           "colors": [WHITE], "sub": f"${m:,.2f} MARKET  •  #{c['number']}", "sub_size": 110})
+            cap.append(f"{rank}. {c['name']} #{c['number']} ({c.get('rarity','')}{', ' + vname.title() if vname else ''}) - ${m:,.2f}")
+        cap += ["", f"Prices: TCGplayer market price{(' updated ' + updated) if updated else ''}. Prices move daily.", "",
+                "Check your bulk and tell us what you found 👇", "",
+                "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+                "#PokemonCards #PokemonTCG #CardStax #PokemonBulk #PokePulse #PokemonInvesting"]
+        return {"story_id": f"bulk {st['name']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap)}
+    return None
 
-def render_native_scene_slide(scene, out_path):
-    img = Image.new("RGB", (W, H), (10, 10, 14))
-    draw = ImageDraw.Draw(img)
+# ---------------------------------------------------------------- topic picker
 
+TOPICS = ["news", "drops", "sales", "bulk"]
+
+def topic_for_now():
+    forced = os.getenv("REEL_TOPIC", "").strip().lower()
+    if forced in TOPICS:
+        return forced
+    h = datetime.now(timezone.utc).hour
+    if 12 <= h <= 15:
+        return "news"      # 9am ET run
+    if 16 <= h <= 19:
+        return "drops"     # 1pm ET run
+    if 20 <= h <= 23:
+        return "sales"     # 5:30pm ET run
+    return "bulk"          # 9pm ET run
+
+def build_story():
+    posted = set()
+    if os.path.exists("posted_news.txt"):
+        with open("posted_news.txt") as f:
+            posted = {l.strip().lower() for l in f if l.strip()}
+    captions = recent_ig_captions()
+    first = topic_for_now()
+    order = [first] + [t for t in ["news", "drops", "bulk", "sales"] if t != first]
+    articles = None
+
+    for topic in order:
+        print(f"--- Trying topic: {topic}")
+        if topic == "bulk":
+            story = build_bulk_story(captions)
+            if story:
+                return story
+            continue
+        if articles is None:
+            articles = gather_articles()
+            print(f"{len(articles)} recent card-related articles found")
+        for art in articles:
+            if already_posted(art["title"], posted, captions):
+                continue
+            blob = " ".join([art["title"], art["desc"]] + art["paras"][:6] + art["items"])
+            if topic == "drops":
+                if word_hits(blob, DROP_WORDS) < 2:
+                    continue
+                story = build_drop_story(art)
+            elif topic == "sales":
+                if word_hits(art["title"] + " " + art["desc"], SALE_WORDS) < 1 or "$" not in blob:
+                    continue
+                story = build_article_story(art, "sales")
+            else:
+                story = build_article_story(art, "news")
+            if story:
+                print(f"Picked [{topic}] {art['source']}: {art['title']}")
+                return story
+    return None
+
+# ---------------------------------------------------------------- rendering
+
+def load_image(url):
     try:
-        pdata = requests.get(scene["img_url"], headers=API_HEADERS, timeout=10).content
-        with open("temp_raw.png", "wb") as f:
-            f.write(pdata)
-        raw = Image.open("temp_raw.png").convert("RGB")
-        raw.thumbnail((1020, 1160), Image.Resampling.LANCZOS)
-        rw, rh = raw.size
-        img.paste(raw, ((W - rw) // 2, 40))
+        data = requests.get(url, headers=API_HEADERS, timeout=15).content
+        with open("temp_raw", "wb") as f:
+            f.write(data)
+        im = Image.open("temp_raw")
+        im.load()
+        return im.convert("RGB")
     except Exception as e:
-        print(f"Error loading image {scene['img_url']}: {e}")
+        print(f"Error loading image {url}: {e}")
+        return None
 
-    for y in range(980, 1260):
-        t = (y - 980) / 280
-        alpha = int(255 * t)
-        draw.line([(0, y), (W, y)], fill=(10, 10, 14, alpha))
+def render_scene_layers(scene, bg_path, txt_path):
+    """bg = artwork (gets the slow zoom), txt = text layer (stays sharp, fades in)."""
+    bg = Image.new("RGB", (W, H), BG)
+    raw = load_image(scene["img_url"])
+    if raw is not None:
+        # blurred, darkened fill behind the art so wide/tall images never leave empty bars
+        cover = raw.copy()
+        scale = max(W / cover.width, IMG_BOTTOM / cover.height)
+        cover = cover.resize((int(cover.width * scale) + 1, int(cover.height * scale) + 1), Image.Resampling.LANCZOS)
+        left = (cover.width - W) // 2
+        top = (cover.height - IMG_BOTTOM) // 2
+        cover = cover.crop((left, top, left + W, top + IMG_BOTTOM)).filter(ImageFilter.GaussianBlur(28))
+        cover = Image.blend(cover, Image.new("RGB", cover.size, BG), 0.55)
+        bg.paste(cover, (0, 0))
 
-    tag_text = scene["tag"]
-    a_font = get_font(52)
-    abox = draw.textbbox((0, 0), tag_text, font=a_font)
-    aw = (abox[2] - abox[0]) + 56
-    ah = 68
+        art = raw.copy()
+        art.thumbnail((1000, IMG_BOTTOM - 70), Image.Resampling.LANCZOS)
+        bg.paste(art, ((W - art.width) // 2, 40 + (IMG_BOTTOM - 70 - art.height) // 2))
+
+    # real fade from the art into the dark text area (alpha composite, not solid lines)
+    fade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    fd = ImageDraw.Draw(fade)
+    f_start = IMG_BOTTOM - 300
+    for y in range(f_start, H):
+        a = 255 if y >= IMG_BOTTOM else int(255 * ((y - f_start) / 300) ** 1.4)
+        fd.line([(0, y), (W, y)], fill=BG + (a,))
+    bg = Image.alpha_composite(bg.convert("RGBA"), fade).convert("RGB")
+    bg.save(bg_path)
+
+    # text layer
+    txt = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(txt)
+
+    tag = scene["tag"]
+    tf = get_font(54)
+    aw = text_w(d, tag, tf) + 60
+    ah = 72
     ax = (W - aw) // 2
-    ay = 1140
+    d.rounded_rectangle([ax + 4, TAG_Y + 5, ax + aw + 4, TAG_Y + ah + 5], radius=8, fill=(0, 0, 0, 255))
+    d.rounded_rectangle([ax, TAG_Y, ax + aw, TAG_Y + ah], radius=8, fill=RED)
+    d.text((ax + 30, TAG_Y + 7), tag, font=tf, fill=WHITE)
 
-    draw.rounded_rectangle([ax + 3, ay + 4, ax + aw + 3, ay + ah + 4], radius=6, fill="#000000")
-    draw.rounded_rectangle([ax, ay, ax + aw, ay + ah], radius=4, fill="#E50914")
-    draw.text((ax + 28, ay + 6), tag_text, font=a_font, fill="#FFFFFF")
-
-    has_3 = bool(scene.get("line3"))
-    start_target = 142 if has_3 else 178
-
-    y_start = ay + ah + 16
-    y_start = draw_autofit_text(draw, scene.get("line1", ""), y_start, max_w=980, target_size=start_target, fill=scene.get("line1_color", "#FFFFFF"))
-    y_start = draw_autofit_text(draw, scene.get("line2", ""), y_start, max_w=980, target_size=start_target, fill=scene.get("line2_color", "#FFFFFF"))
-    if has_3:
-        draw_autofit_text(draw, scene.get("line3", ""), y_start, max_w=980, target_size=start_target, fill=scene.get("line3_color", "#00FF66"))
-
-    img.save(out_path)
+    sub = scene.get("sub", "")
+    sub_size = scene.get("sub_size", 70)
+    sub_h = sub_size + 24 if sub else 0
+    font, stroke, lines, line_h = fit_block(d, scene["text"], TEXT_MAX_W, TEXT_BOTTOM - TEXT_TOP - sub_h)
+    block_h = len(lines) * line_h + sub_h
+    top = TEXT_TOP + max(0, (TEXT_BOTTOM - TEXT_TOP - block_h) // 2)
+    y = draw_lines(d, lines, font, stroke, line_h, top, scene["colors"])
+    if sub:
+        sf = get_font(sub_size)
+        d.text(((W - text_w(d, sub, sf, 5)) // 2, y + 14), sub, font=sf, fill=GREEN,
+               stroke_fill="#000000", stroke_width=5)
+    txt.save(txt_path)
 
 def make_cta_slide(out_path="f_cta.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
-    cdata = requests.get(cta_url, headers=API_HEADERS).content
-    with open("raw_cta.png", "wb") as f:
-        f.write(cdata)
-
-    base = Image.new("RGB", (W, H), (10, 10, 14))
-    cta_img = Image.open("raw_cta.png").convert("RGB")
-    cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
-    cw, ch = cta_img.size
-    cx = (W - cw) // 2
-    cy = 160
-    base.paste(cta_img, (cx, cy))
-
+    base = Image.new("RGB", (W, H), BG)
+    cta_img = load_image(cta_url)
+    if cta_img is not None:
+        cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
+        base.paste(cta_img, ((W - cta_img.width) // 2, 160))
     draw = ImageDraw.Draw(base)
-    draw.rounded_rectangle([80, 1620, W - 80, 1730], radius=55, fill="#FFE600", outline="#FFFFFF", width=3)
+    draw.rounded_rectangle([80, 1620, W - 80, 1730], radius=55, fill=YELLOW, outline=WHITE, width=3)
+    label = "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER"
     c_font = get_font(52)
-    c_box = draw.textbbox((0, 0), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font)
-    cw_txt = c_box[2] - c_box[0]
-    draw.text(((W - cw_txt) // 2, 1644), "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER", font=c_font, fill="#000000")
+    draw.text(((W - text_w(draw, label, c_font)) // 2, 1644), label, font=c_font, fill="#000000")
     base.save(out_path)
+
+def render_motion_clip(bg_path, txt_path, dur, out_vid, zoom_in=True):
+    """Slow Ken Burns zoom on the art + text fading in on top."""
+    frames = int(dur * 30)
+    z = f"1+0.07*on/{frames}" if zoom_in else f"1.07-0.07*on/{frames}"
+    inputs = ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", bg_path]
+    if txt_path:
+        inputs += ["-framerate", "30", "-loop", "1", "-t", str(dur), "-i", txt_path]
+        fc = (f"[0]scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps=30[bg];"
+              f"[1]format=rgba,fade=t=in:st=0.1:d=0.35:alpha=1[tx];"
+              f"[bg][tx]overlay=0:0,format=yuv420p[v]")
+    else:
+        fc = (f"[0]scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps=30,"
+              f"format=yuv420p[v]")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error"] + inputs + [
+        "-filter_complex", fc, "-map", "[v]", "-t", str(dur),
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-r", "30", out_vid
+    ], check=True)
 
 def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
     scene_vids = []
     total_duration = 0.0
 
     for idx, sc in enumerate(story["scenes"]):
-        slide_img = f"slide_{idx+1}.png"
-        out_vid = f"scene_{idx+1}.mp4"
-
         dur = calculate_reading_duration(sc)
         total_duration += dur
-
-        print(f"Rendering scene {idx+1} ({dur}s): {sc['line1']}...")
-        render_native_scene_slide(sc, slide_img)
-
-        subprocess.run([
-            "ffmpeg", "-y", "-loop", "1", "-t", str(dur), "-i", slide_img,
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", out_vid
-        ], check=True)
+        print(f"Rendering scene {idx+1} ({dur}s): {sc['text'][:50]}...")
+        render_scene_layers(sc, f"bg_{idx+1}.png", f"txt_{idx+1}.png")
+        out_vid = f"scene_{idx+1}.mp4"
+        render_motion_clip(f"bg_{idx+1}.png", f"txt_{idx+1}.png", dur, out_vid, zoom_in=(idx % 2 == 0))
         scene_vids.append(out_vid)
 
     cta_dur = 2.8
     total_duration += cta_dur
-    print(f"Rendering Scene 5: Newsletter CTA ({cta_dur}s)...")
+    print(f"Rendering newsletter CTA ({cta_dur}s)...")
     make_cta_slide("f_cta.png")
-    subprocess.run([
-        "ffmpeg", "-y", "-loop", "1", "-t", str(cta_dur), "-i", "f_cta.png",
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30", "scene_cta.mp4"
-    ], check=True)
+    render_motion_clip("f_cta.png", None, cta_dur, "scene_cta.mp4")
     scene_vids.append("scene_cta.mp4")
 
     with open("playlist.txt", "w") as f:
         for v in scene_vids:
             f.write(f"file '{v}'\n")
 
-    # Detect all uploaded audio in audio/ folder or repo root
     audio_candidates = glob.glob("audio/*.mp3") + glob.glob("audio/*.wav") + glob.glob("*.mp3")
     audio_candidates = [f for f in audio_candidates if f not in ["bg_audio.mp3", "pokemon_beat.mp3"]]
-
     if audio_candidates:
-        selected_audio = random.choice(audio_candidates)
-        print(f"Using rotated soundtrack: {selected_audio}")
-        audio_file = selected_audio
+        audio_file = random.choice(audio_candidates)
+        print(f"Using rotated soundtrack: {audio_file}")
     else:
         audio_file = "bg_audio.wav"
-        subprocess.run([
-            "ffmpeg", "-y", "-f", "lavfi",
-            "-i", f"sine=frequency=220:sample_rate=44100",
-            "-t", str(total_duration),
-            "-c:a", "pcm_s16le",
-            audio_file
-        ], check=True)
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                        "-i", "sine=frequency=220:sample_rate=44100",
+                        "-t", str(total_duration), "-c:a", "pcm_s16le", audio_file], check=True)
 
     fade_start = max(0.5, round(total_duration - 1.2, 2))
     subprocess.run([
-        "ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", "playlist.txt",
+        "ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", "playlist.txt",
         "-stream_loop", "-1", "-i", audio_file,
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", "30",
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", "30",
         "-c:a", "aac", "-b:a", "192k",
         "-filter_complex", f"[1:a]afade=t=out:st={fade_start}:d=1.2[aout]",
         "-map", "0:v", "-map", "[aout]",
-        "-shortest",
-        "-t", str(total_duration),
+        "-shortest", "-t", str(total_duration),
         output_mp4
     ], check=True)
-
     return output_mp4
+
+# ---------------------------------------------------------------- publishing
 
 def publish_content(video_url, caption):
     access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
 
     print("Step 1: Publishing Reel to Instagram...")
-    res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
+    res = requests.post(f"{GRAPH}/{IG_USER_ID}/media", data={
         "media_type": "REELS",
         "video_url": video_url,
         "caption": caption,
         "access_token": access_token
     }).json()
 
+    published = False
     if "id" in res:
         cid = res["id"]
         print(f"Reel Container: {cid}. Transcoding...")
         for _ in range(18):
             time.sleep(10)
-            status = requests.get(f"https://graph.facebook.com/v21.0/{cid}?fields=status_code&access_token={access_token}").json()
+            status = requests.get(f"{GRAPH}/{cid}?fields=status_code&access_token={access_token}").json()
             code = status.get("status_code")
             print(f"Status: {code}")
             if code == "FINISHED":
@@ -461,16 +718,17 @@ def publish_content(video_url, caption):
                 print("Encoding error on Instagram.")
                 break
 
-        pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
+        pub = requests.post(f"{GRAPH}/{IG_USER_ID}/media_publish", data={
             "creation_id": cid,
             "access_token": access_token
         }).json()
         print(f"Reel Publish Result: {pub}")
+        published = "id" in pub
     else:
         print("Reel Error:", res)
 
     print("\nStep 2: Publishing to Story...")
-    s_res = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media", data={
+    s_res = requests.post(f"{GRAPH}/{IG_USER_ID}/media", data={
         "media_type": "STORIES",
         "video_url": video_url,
         "access_token": access_token
@@ -480,19 +738,23 @@ def publish_content(video_url, caption):
         sid = s_res["id"]
         for _ in range(12):
             time.sleep(8)
-            s_status = requests.get(f"https://graph.facebook.com/v21.0/{sid}?fields=status_code&access_token={access_token}").json()
+            s_status = requests.get(f"{GRAPH}/{sid}?fields=status_code&access_token={access_token}").json()
             if s_status.get("status_code") == "FINISHED":
                 break
-        s_pub = requests.post(f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish", data={
+        s_pub = requests.post(f"{GRAPH}/{IG_USER_ID}/media_publish", data={
             "creation_id": sid,
             "access_token": access_token
         }).json()
         print(f"Story Publish Result: {s_pub}")
+    return published
 
 if __name__ == "__main__":
-    story = build_dynamic_story_from_live_news()
-    print(f"Producing Live News Reel: {story['story_id']}")
+    story = build_story()
+    if story is None:
+        print("Nothing new to post on any topic right now - skipping this run (nothing repeated).")
+        sys.exit(0)
 
+    print(f"Producing Reel: {story['story_id']}")
     mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
 
     print("Uploading to Cloudinary CDN...")
@@ -500,4 +762,6 @@ if __name__ == "__main__":
     video_cdn_url = upload_res.get("secure_url")
     print(f"CDN URL: {video_cdn_url}")
 
-    publish_content(video_cdn_url, story["caption_full"])
+    if publish_content(video_cdn_url, story["caption_full"]):
+        with open("posted_news.txt", "a") as f:
+            f.write(story["key"] + "\n")
