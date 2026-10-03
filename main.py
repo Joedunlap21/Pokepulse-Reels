@@ -1085,13 +1085,26 @@ if __name__ == "__main__":
         sys.exit(0)
 
     print(f"Producing Reel: {story['story_id']}")
-    try:
-        from reel_v2 import compile_voiced_reel
-        mp4_file = compile_voiced_reel(story, "pokepulse_reel.mp4")
-        print("Built voiced reel (v2)")
-    except Exception as e:
-        print(f"Voiced reel failed ({e}) - falling back to classic slideshow")
-        mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
+    mp4_file = None
+    # Drops get the drop-alert format (drops_reel.py). Set repo variable DROPS_STYLE=classic to turn it off.
+    if story.get("topic") == "drops" and os.getenv("DROPS_STYLE", "").strip().lower() != "classic":
+        try:
+            from drops_reel import compile_drop_reel
+            mp4_file = compile_drop_reel(story, "pokepulse_reel.mp4")
+            print("Built drop-alert reel")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Drop-alert reel failed ({e}) - using the normal reel")
+            mp4_file = None
+    if mp4_file is None:
+        try:
+            from reel_v2 import compile_voiced_reel
+            mp4_file = compile_voiced_reel(story, "pokepulse_reel.mp4")
+            print("Built voiced reel (v2)")
+        except Exception as e:
+            print(f"Voiced reel failed ({e}) - falling back to classic slideshow")
+            mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
 
     try:
         make_cover(story, "cover.jpg")   # our own thumbnail (replaces any auto cover)
