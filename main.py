@@ -468,6 +468,23 @@ def say_dollars(m):
 VARIANT_NAMES = {"normal": "", "holofoil": "HOLO", "reverseHolofoil": "REVERSE HOLO",
                  "1stEditionNormal": "1ST EDITION", "1stEditionHolofoil": "1ST EDITION HOLO"}
 
+# Only post cards collectors actually care about (popular Pokemon / trainers) at real prices.
+# Edit these lists / numbers any time.
+POPULAR = ["charizard", "pikachu", "raichu", "mewtwo", "mew", "eevee", "umbreon", "espeon", "sylveon", "vaporeon",
+           "jolteon", "flareon", "leafeon", "glaceon", "gengar", "lugia", "rayquaza", "gardevoir", "greninja",
+           "lucario", "snorlax", "dragonite", "gyarados", "blastoise", "venusaur", "bulbasaur", "charmander",
+           "squirtle", "gholdengo", "mimikyu", "ditto", "arcanine", "tyranitar", "garchomp", "giratina", "dialga",
+           "palkia", "zekrom", "reshiram", "kyogre", "groudon", "suicune", "ho-oh", "celebi", "jirachi", "darkrai",
+           "alakazam", "dragapult", "ceruledge", "pecharunt", "terapagos", "ogerpon", "iron valiant", "roaring moon",
+           "psyduck", "jigglypuff", "lapras", "articuno", "zapdos", "moltres", "magikarp", "togepi", "piplup",
+           "lillie", "iono", "marnie", "cynthia", "misty", "erika", "n's", "team rocket", "ethan", "hop"]
+BULK_MIN_PRICE = 5.0     # every card in a Bulk Gold reel must be worth at least this
+CHASE_MIN_PRICE = 20.0   # every card in a Top Chase reel must be worth at least this
+
+def is_popular(card):
+    name = (card.get("name") or "").lower()
+    return any(re.search(r"(?<![a-z])" + re.escape(p) + r"(?![a-z])", name) for p in POPULAR)
+
 def build_bulk_story(captions):
     sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 15}).get("data", [])
     sets = [s for s in sets if (s.get("total") or 0) >= 60 and "promo" not in s.get("name", "").lower()]
@@ -483,12 +500,12 @@ def build_bulk_story(captions):
         for c in cards:
             m, v = best_market(c)
             img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
-            if m > 0 and img:
+            if m >= BULK_MIN_PRICE and img and is_popular(c):
                 ranked.append((m, v, c, img))
         ranked.sort(key=lambda x: -x[0])
         top = ranked[:3]   # 3 cards keeps the reel short
-        if len(top) < 3 or top[0][0] < 1.0:
-            print(f"{st['name']}: no commons/uncommons worth $1+ yet")
+        if len(top) < 3:
+            print(f"{st['name']}: not 3 popular commons/uncommons worth ${BULK_MIN_PRICE:.0f}+ yet")
             continue
 
         updated = (top[0][2].get("tcgplayer") or {}).get("updatedAt", "")
@@ -528,12 +545,12 @@ def build_chase_story(captions):
         for c in cards:
             m, v = best_market(c)
             img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
-            if m > 0 and img:
+            if m >= CHASE_MIN_PRICE and img and is_popular(c):
                 ranked.append((m, v, c, img))
         ranked.sort(key=lambda x: -x[0])
         top = ranked[:3]   # top 3 keeps the reel short
-        if len(top) < 3 or top[0][0] < 5:
-            print(f"{st['name']}: no price data for chase cards yet")
+        if len(top) < 3:
+            print(f"{st['name']}: not 3 popular chase cards worth ${CHASE_MIN_PRICE:.0f}+ yet")
             continue
         top = list(reversed(top))   # count down: #5 -> #1
         updated = (top[-1][2].get("tcgplayer") or {}).get("updatedAt", "")
