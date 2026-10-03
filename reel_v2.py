@@ -390,40 +390,77 @@ BROLL_QUERIES = {
     "chase": ["opening card pack", "trading cards", "collector cards", "card collection"],
 }
 
+def _download(url, out):
+    data = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=90).content
+    if len(data) < 50_000:
+        raise RuntimeError("download too small")
+    with open(out, "wb") as fh:
+        fh.write(data)
+    return out
+
+
+def _pixabay(q, key, out):
+    r = requests.get("https://pixabay.com/api/videos/",
+                     params={"key": key, "q": q, "per_page": 30, "safesearch": "true", "video_type": "film"},
+                     timeout=20)
+    hits = r.json().get("hits", [])
+    random.shuffle(hits)
+    # prefer vertical clips, but wide ones get centre-cropped to fill the screen
+    hits.sort(key=lambda h: -int(((h.get("videos") or {}).get("medium") or {}).get("height", 0) >
+                                 ((h.get("videos") or {}).get("medium") or {}).get("width", 1)))
+    for h in hits:
+        if (h.get("duration") or 0) < 4:
+            continue
+        vids = h.get("videos") or {}
+        f = vids.get("medium") or vids.get("large") or vids.get("small")
+        if f and f.get("url"):
+            _download(f["url"], out)
+            print(f"B-roll: Pixabay '{q}' video {h.get('id')} by {h.get('user')}")
+            return out
+    return None
+
+
+def _pexels(q, key, out):
+    r = requests.get("https://api.pexels.com/videos/search", headers={"Authorization": key},
+                     params={"query": q, "orientation": "portrait", "size": "medium", "per_page": 15}, timeout=20)
+    vids = r.json().get("videos", [])
+    random.shuffle(vids)
+    for v in vids:
+        files = [f for f in v.get("video_files", [])
+                 if f.get("height") and f.get("width") and f["height"] > f["width"]
+                 and 1000 <= f["height"] <= 2200 and (f.get("file_type") or "").endswith("mp4")]
+        if files and (v.get("duration") or 0) >= 4:
+            _download(sorted(files, key=lambda x: x["height"])[-1]["link"], out)
+            print(f"B-roll: Pexels '{q}' video {v.get('id')}")
+            return out
+    return None
+
+
 def get_broll(topic, out="v2_broll.mp4"):
-    """Your own clips (clips/*.mp4) first, then a free Pexels clip. Returns a path or None."""
-    own = glob.glob("clips/*.mp4") + glob.glob("clips/*.mov") + glob.glob("clips/*.MOV") + glob.glob("clips/*.MP4")
+    """Your own clips (clips/*.mp4) first, then a free Pixabay / Pexels clip. Returns a path or None."""
+    own = [f for ext in ("mp4", "MP4", "mov", "MOV") for f in glob.glob(f"clips/*.{ext}")]
+    pixabay_key = os.getenv("PIXABAY_API_KEY", "").strip()
     pexels_key = os.getenv("PEXELS_API_KEY", "").strip()
-    if own and (not pexels_key or random.random() < 0.7):
+    if own and (not (pixabay_key or pexels_key) or random.random() < 0.7):
         pick = random.choice(own)
         print(f"B-roll: your clip {pick}")
         return pick
-    if not pexels_key:
-        print("B-roll: none (add a PEXELS_API_KEY secret or put clips in the clips folder)")
+    if not (pixabay_key or pexels_key):
+        print("B-roll: none (add a PIXABAY_API_KEY secret or put clips in the clips folder)")
         return None
-    try:
-        q = random.choice(BROLL_QUERIES.get(topic, BROLL_QUERIES["news"]))
-        r = requests.get("https://api.pexels.com/videos/search",
-                         headers={"Authorization": pexels_key},
-                         params={"query": q, "orientation": "portrait", "size": "medium", "per_page": 15},
-                         timeout=20)
-        vids = r.json().get("videos", [])
-        random.shuffle(vids)
-        for v in vids:
-            files = [f for f in v.get("video_files", [])
-                     if f.get("height") and f.get("width") and f["height"] > f["width"]
-                     and 1000 <= f["height"] <= 2200 and (f.get("file_type") or "").endswith("mp4")]
-            if not files or (v.get("duration") or 0) < 4:
+    queries = BROLL_QUERIES.get(topic, BROLL_QUERIES["news"])[:]
+    random.shuffle(queries)
+    for q in queries[:3]:
+        for name, fn, key in (("Pixabay", _pixabay, pixabay_key), ("Pexels", _pexels, pexels_key)):
+            if not key:
                 continue
-            f = sorted(files, key=lambda x: x["height"])[-1]
-            data = requests.get(f["link"], timeout=60).content
-            with open(out, "wb") as fh:
-                fh.write(data)
-            print(f"B-roll: Pexels '{q}' video {v.get('id')} by {(v.get('user') or {}).get('name')}")
-            return out
-        print(f"B-roll: no usable Pexels clip for '{q}'")
-    except Exception as e:
-        print(f"B-roll failed ({e})")
+            try:
+                got = fn(q, key, out)
+                if got:
+                    return got
+            except Exception as e:
+                print(f"B-roll: {name} '{q}' failed ({e})")
+    print("B-roll: no usable clip found")
     return None
 
 
