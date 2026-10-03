@@ -63,6 +63,7 @@ jobs:
           POKEMONTCG_API_KEY: ${{ secrets.POKEMONTCG_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           PEXELS_API_KEY: ${{ secrets.PEXELS_API_KEY }}
+          PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           REEL_TOPIC: ${{ github.event.inputs.topic }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           REEL_VOICE_MODE: ${{ github.event.inputs.voice_mode }}
