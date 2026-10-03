@@ -842,6 +842,18 @@ if __name__ == "__main__":
 
     if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes"):
         print("DRY RUN - video saved as pokepulse_reel.mp4, nothing posted.")
+        print("CAPTION:\n" + story["caption_full"])
+        try:
+            # contact sheet: one frame every second, so the whole reel can be reviewed at a glance
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mp4_file, "-vf",
+                            "fps=1,scale=270:-1,tile=6x4:padding=4:color=white", "-frames:v", "1",
+                            "test_sheet.jpg"], check=True)
+            sheet = cloudinary.uploader.upload("test_sheet.jpg", folder="pokepulse_tests")
+            vid = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_tests")
+            print(f"TEST SHEET: {sheet.get('secure_url')}")
+            print(f"TEST VIDEO: {vid.get('secure_url')}")
+        except Exception as e:
+            print(f"Couldn't upload test preview: {e}")
         sys.exit(0)
 
     print("Uploading to Cloudinary CDN...")
