@@ -398,7 +398,7 @@ def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None, ex
             p = f"v2_cap_{idx}_{j}.png"
             render_caption([c["w"] for c in ch], p)
             start = ch[0]["start"]
-            end = chunks[j + 1][0]["start"] if j + 1 < len(chunks) else dur
+            end = chunks[j + 1][0]["start"] - 0.06 if j + 1 < len(chunks) else dur
             caps.append((p, max(0, start - 0.05), end))
     elif screen_text:
         p = f"v2_block_{idx}.png"
@@ -514,7 +514,7 @@ def render_broll_clip(video, scene, idx, words, dur, out, screen_text=None):
         for j, ch in enumerate(chunks):
             p = f"v2_cap_{idx}_{j}.png"
             render_caption([c["w"] for c in ch], p)
-            end = chunks[j + 1][0]["start"] if j + 1 < len(chunks) else dur
+            end = chunks[j + 1][0]["start"] - 0.06 if j + 1 < len(chunks) else dur
             caps.append((p, max(0, ch[0]["start"] - 0.05), end))
     elif screen_text:
         p = f"v2_block_{idx}.png"
