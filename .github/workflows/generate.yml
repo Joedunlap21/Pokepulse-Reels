@@ -51,7 +51,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install requests pillow cloudinary edge-tts
+          pip install requests pillow cloudinary edge-tts numpy opencv-python-headless
 
       - name: Generate & Publish Reel
         env:
@@ -69,6 +69,8 @@ jobs:
           REEL_VOICE_MODE: ${{ github.event.inputs.voice_mode }}
           # To change the voice for scheduled posts, set a repo VARIABLE named REEL_VOICE
           REEL_VOICE: ${{ github.event.inputs.voice || vars.REEL_VOICE }}
+          # Drop-alert format for the drops topic. Set a repo VARIABLE DROPS_STYLE=classic to switch it off
+          DROPS_STYLE: ${{ vars.DROPS_STYLE }}
         run: python main.py
 
       - name: Save video for download
