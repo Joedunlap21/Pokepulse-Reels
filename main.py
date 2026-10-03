@@ -420,6 +420,54 @@ def build_drop_story(art):
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
             "caption_full": "\n".join(lines)}
 
+# ---------------------------------------------------------------- topic: upcoming drop - what's inside
+
+INSIDE_RE = r"\b(contains?|includes?|including|comes with|inside|booster packs?|promo cards?|foil|sleeves|dice|coin|playmat)\b"
+UPCOMING_RE = r"\b(upcoming|pre-?orders?|will (?:be )?release|releases?|releasing|launch(?:es|ing)?|coming|available (?:on|starting)|hits? (?:shelves|stores))\b"
+
+def build_inside_story(art):
+    """Upcoming product + exactly what's in the box (packs, promos, accessories) + price/date when given."""
+    sents = all_sentences(art)
+    blob = " ".join([art["title"], art["desc"]] + art["paras"] + art["items"])
+    if not re.search(UPCOMING_RE, blob, re.I):
+        return None
+    inside = [s for s in sents if re.search(INSIDE_RE, s, re.I)]
+    contents = [i for i in art["items"] if re.search(r"pack|promo|card|sleeve|dice|coin|marker|box|pin|figure|playmat|binder|sticker", i, re.I)]
+    when = [s for s in sents if re.search(MONTHS + r"\s+\d{1,2}", s)]
+    price = [s for s in sents if re.search(r"\$\s?\d", s)] + [i for i in art["items"] if re.search(r"\$\s?\d", i)]
+    if not inside and len(contents) < 2:
+        return None
+    imgs = art["images"]
+    scenes = [{"tag": "WHAT'S INSIDE", "img_url": imgs[0], "text": art["title"].upper(), "colors": [YELLOW, WHITE]}]
+    def add(tag, text, colors):
+        scenes.append({"tag": tag, "img_url": imgs[len(scenes) % len(imgs)], "text": text.upper(), "colors": colors})
+    if contents:
+        add("WHAT'S INSIDE", "\n".join(fit_list(contents, 26)), [WHITE, YELLOW])
+    for s in inside[:2]:
+        add("WHAT'S INSIDE", s, [WHITE, YELLOW])
+    if when:
+        add("RELEASE DATE", when[0], [YELLOW, WHITE])
+    price = [p for p in price if p not in inside[:2]]
+    if price:
+        add("PRICE", " ".join(fit_list(price, 28)), [YELLOW, WHITE])
+    if len(scenes) < 3:
+        return None
+    lines = [f"📦 WHAT'S INSIDE: {art['title']}", ""]
+    if contents:
+        lines += ["Inside the box:"] + [f"• {c}" for c in contents[:10]] + [""]
+    for s in inside[:3]:
+        lines.append(s)
+    if when:
+        lines.append("📅 Release: " + when[0])
+    if price:
+        lines.append("💲 Price: " + " ".join(price[:2]))
+    lines += ["", f"Source: {art['source']}", "",
+              "Are you picking this one up? 👇", "",
+              "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+              "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
+    return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
+            "caption_full": "\n".join(lines)}
+
 # ---------------------------------------------------------------- topic: bulk gold
 
 TCG_API = "https://api.pokemontcg.io/v2"
@@ -648,7 +696,7 @@ def vary_images(story, art):
 
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["news", "drops", "sales", "bulk", "chase"]
+TOPICS = ["news", "drops", "sales", "inside", "chase"]   # bulk removed; chase only when run by hand
 
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
@@ -661,8 +709,8 @@ def topic_for_now():
         return "drops"     # 12:30pm ET run
     if 20 <= h <= 23:
         return "sales"     # 5:30pm ET run
-    # 9:30pm ET run: alternate Bulk Gold and Top Chase Cards day by day
-    return "bulk" if datetime.now(timezone.utc).toordinal() % 2 == 0 else "chase"
+    # 9:30pm ET run: Upcoming Drop - What's Inside
+    return "inside"
 
 def build_story():
     posted = set()
@@ -671,7 +719,7 @@ def build_story():
             posted = {l.strip().lower() for l in f if l.strip()}
     captions = recent_ig_captions()
     first = topic_for_now()
-    order = [first] + [t for t in ["news", "drops", "bulk", "chase", "sales"] if t != first]
+    order = [first] + [t for t in ["news", "drops", "inside", "sales"] if t != first]
     articles = None
 
     for topic in order:
@@ -697,6 +745,10 @@ def build_story():
                 if word_hits(blob, DROP_WORDS) < 2:
                     continue
                 story = build_drop_story(art)
+            elif topic == "inside":
+                if word_hits(blob, DROP_WORDS) < 2 or not re.search(INSIDE_RE, blob, re.I):
+                    continue
+                story = build_inside_story(art)
             elif topic == "sales":
                 if word_hits(art["title"] + " " + art["desc"], SALE_WORDS) < 1 or "$" not in blob:
                     continue
@@ -836,7 +888,7 @@ def draw_price_box(img, pr):
     center("TCGPLAYER • TREND: CARDMARKET", y1 - 70, 30, (255, 255, 255, 120))
     return Image.alpha_composite(img.convert("RGBA"), layer).convert("RGB")
 
-COVER_LABELS = {"news": "POKÉMON NEWS", "drops": "DROP ALERT", "sales": "BIG SALE",
+COVER_LABELS = {"news": "POKÉMON NEWS", "drops": "DROP ALERT", "sales": "BIG SALE", "inside": "WHAT'S INSIDE",
                 "bulk": "BULK GOLD", "chase": "CHASE CARDS"}
 
 def make_cover(story, out_path="cover.jpg"):
@@ -1104,7 +1156,7 @@ if __name__ == "__main__":
     print(f"Producing Reel: {story['story_id']}")
     mp4_file = None
     # Drops get the drop-alert format (drops_reel.py). Set repo variable DROPS_STYLE=classic to turn it off.
-    if story.get("topic") == "drops" and os.getenv("DROPS_STYLE", "").strip().lower() != "classic":
+    if story.get("topic") in ("drops", "inside") and os.getenv("DROPS_STYLE", "").strip().lower() != "classic":
         try:
             from drops_reel import compile_drop_reel
             mp4_file = compile_drop_reel(story, "pokepulse_reel.mp4")

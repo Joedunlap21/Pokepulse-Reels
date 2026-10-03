@@ -457,6 +457,8 @@ def ai_drop_script(story, source):
         return None
     from reel_v2 import gemini_models
     import time
+    if story.get("topic") == "inside":
+        return ai_inside_script(story, source, key)
     prompt = (
         "You write the voiceover for a 15-20 second Pokemon TCG DROP ALERT Reel, in the style of restock/drop-alert "
         "pages (fast, hyped, urgent, like telling collectors where to go right now). Short spoken lines, contractions, "
@@ -503,10 +505,67 @@ def ai_drop_script(story, source):
     return None
 
 
+def ai_inside_script(story, source, key):
+    """Upcoming product - WHAT'S INSIDE version of the script."""
+    prompt = (
+        "You write the voiceover for a 15-20 second Pokemon TCG 'WHAT'S INSIDE' Reel about an UPCOMING product, "
+        "in the style of drop-alert pages (fast, hyped, collectors talking to collectors). Short spoken lines, "
+        "contractions, plain words, no emojis, no hashtags, no news-anchor phrases.\n"
+        "Write 5 or 6 lines, each 5-13 words:\n"
+        "  1: hook naming the product, e.g. 'Here's what's inside the new 30th Celebration Booster Bundle!'\n"
+        "  next 2-3 lines: EXACTLY what's inside - number of packs, promo cards, sleeves, dice, etc.\n"
+        "  then: release date and price - only if in the source\n"
+        "  last: 'Follow so you never miss a drop!' style\n"
+        "RULES: use ONLY facts from the source. Never invent contents, quantities, dates, prices or stores. "
+        "Write numbers and prices with digits exactly like the source, e.g. 6 booster packs, $26.94. "
+        "One price per line max.\n"
+        "Also write \"thumb\": 2-5 word ALL CAPS cover text, true to the source.\n"
+        'Reply JSON only: {"thumb": "...", "lines": ["...", "..."]}\n\n'
+        f"SOURCE:\n{source[:3500]}"
+    )
+    return _gemini_lines(story, source, key, prompt)
+
+
+def _gemini_lines(story, source, key, prompt):
+    from reel_v2 import gemini_models
+    import time
+    for model in gemini_models(key)[:3]:
+        for attempt in range(3):
+            try:
+                r = requests.post(f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                                  params={"key": key},
+                                  json={"contents": [{"parts": [{"text": prompt}]}],
+                                        "generationConfig": {"temperature": 0.7, "responseMimeType": "application/json"}},
+                                  timeout=60)
+                if r.status_code in (429, 500, 503):
+                    time.sleep(6 * (attempt + 1))
+                    continue
+                if r.status_code != 200:
+                    break
+                txt = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                data = json.loads(re.search(r"\{.*\}", txt, re.S).group(0))
+                lines = [re.sub(r"\s+", " ", str(x)).strip() for x in data.get("lines", []) if str(x).strip()]
+                bad = [(l, why) for l in lines for ok, why in [line_is_true(l, source)] if not ok]
+                if bad or not 4 <= len(lines) <= 7 or any(len(l.split()) > 16 for l in lines):
+                    print(f"Script: {model} rejected ({bad[:2] or len(lines)}), retrying...")
+                    continue
+                thumb = re.sub(r"\s+", " ", str(data.get("thumb", ""))).strip().upper()
+                if thumb and len(thumb.split()) <= 6 and line_is_true(thumb, source)[0]:
+                    story["thumb_text"] = thumb
+                print(f"Script: {model}")
+                return lines
+            except Exception as e:
+                print(f"Script: {model} error ({e})")
+                time.sleep(3)
+    return None
+
+
 def fallback_drop_script(story):
     from reel_v2 import _shorten
     sc = story["scenes"]
-    lines = ["Huge drop alert for Pokemon collectors!"]
+    hook = "Here's what's inside the next big Pokemon drop!" if story.get("topic") == "inside" \
+        else "Huge drop alert for Pokemon collectors!"
+    lines = [hook]
     for s in sc:
         txt = s["text"]
         txt = txt.capitalize() if txt.isupper() else txt
@@ -649,7 +708,8 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     voiced = os.getenv("REEL_VOICE_MODE", "").strip().lower() not in ("off", "false", "0", "never")
     shots, vo_clips, t = [], [], 0.0
     logo = None
-    default_logo = store_badge("DROP ALERT", os.path.join(work, "badge_drop.png"))
+    default_logo = store_badge("WHAT'S INSIDE" if story.get("topic") == "inside" else "DROP ALERT",
+                               os.path.join(work, "badge_drop.png"))
     prod_i = 0
     # price tags go on a picture only when we KNOW which product the price is for
     one_price = len(set(re.findall(r"\$\d[\d,]*(?:\.\d{2})?", source))) == 1
