@@ -16,6 +16,7 @@ import json
 import glob
 import random
 import asyncio
+import time
 import subprocess
 
 import requests
@@ -118,55 +119,64 @@ def ai_script(story):
         f"FULL ARTICLE CONTEXT:\n{story.get('context', '')[:3000]}\n\n"
         "SLIDES:\n" + "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
     )
-    model = os.getenv("REEL_AI_MODEL", "").strip() or pick_gemini_model(key)
-    try:
-        r = requests.post(
-            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-            params={"key": key},
-            json={"contents": [{"parts": [{"text": prompt}]}],
-                  "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"}},
-            timeout=60)
-        if r.status_code != 200:
-            print(f"AI script: Gemini HTTP {r.status_code} {r.text[:200]!r}")
-            return None
-        content = r.json()["candidates"][0]["content"]["parts"][0]["text"]
-        m = re.search(r"\{.*\}", content, re.S)
-        data = json.loads(m.group(0))
-        slides = data["slides"]
-        thumb = re.sub(r"\s+", " ", str(data.get("thumb", ""))).strip().upper()
-        if thumb and len(thumb.split()) <= 7:
-            story["thumb_text"] = thumb
-        out = [{"say": re.sub(r"\s+", " ", str(x.get("say", ""))).strip(),
-                "screen": re.sub(r"\s+", " ", str(x.get("screen", ""))).strip().upper()} for x in slides]
-        if len(out) != len(facts) or any(not x["say"] or not x["screen"] or len(x["say"].split()) > 22
-                                         or len(x["screen"].split()) > 9 for x in out):
-            print(f"AI script rejected ({len(out)} slides)")
-            return None
-        print(f"AI script: {model}")
-        return out
-    except Exception as e:
-        print(f"AI script failed ({e}) - using simple trimming")
-        return None
+    forced = os.getenv("REEL_AI_MODEL", "").strip()
+    models = [forced] if forced else gemini_models(key)
+    for model in models[:4]:
+        for attempt in range(3):
+            try:
+                r = requests.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+                    params={"key": key},
+                    json={"contents": [{"parts": [{"text": prompt}]}],
+                          "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"}},
+                    timeout=60)
+                if r.status_code in (429, 500, 503):      # busy / rate limited -> wait and retry
+                    print(f"AI script: {model} busy (HTTP {r.status_code}), retrying...")
+                    time.sleep(6 * (attempt + 1))
+                    continue
+                if r.status_code != 200:
+                    print(f"AI script: {model} HTTP {r.status_code} {r.text[:150]!r}")
+                    break
+                content = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                m = re.search(r"\{.*\}", content, re.S)
+                data = json.loads(m.group(0))
+                slides = data["slides"]
+                out = [{"say": re.sub(r"\s+", " ", str(x.get("say", ""))).strip(),
+                        "screen": re.sub(r"\s+", " ", str(x.get("screen", ""))).strip().upper()} for x in slides]
+                if len(out) != len(facts) or any(not x["say"] or not x["screen"] or len(x["say"].split()) > 22
+                                                 or len(x["screen"].split()) > 9 for x in out):
+                    print(f"AI script: {model} gave a bad script ({len(out)} slides), retrying...")
+                    continue
+                thumb = re.sub(r"\s+", " ", str(data.get("thumb", ""))).strip().upper()
+                if thumb and len(thumb.split()) <= 7:
+                    story["thumb_text"] = thumb
+                print(f"AI script: {model}")
+                return out
+            except Exception as e:
+                print(f"AI script: {model} error ({e})")
+                time.sleep(3)
+    print("AI script unavailable - using simple trimming")
+    return None
 
 
-def pick_gemini_model(key):
-    """Google retires model names often - ask which 'flash' models this key can use and take the newest."""
+def gemini_models(key):
+    """Google retires model names often - ask which 'flash' models this key can use, newest first."""
     try:
         r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
                          params={"key": key, "pageSize": 200}, timeout=20)
         names = [m["name"].split("/")[-1] for m in r.json().get("models", [])
                  if "generateContent" in m.get("supportedGenerationMethods", [])]
-        flash = [n for n in names if "flash" in n and not any(x in n for x in ("lite", "image", "tts", "live", "audio", "thinking", "exp"))]
+        flash = [n for n in names if "flash" in n and not any(x in n for x in ("image", "tts", "live", "audio", "thinking", "exp"))]
         def ver(n):
             m = re.search(r"gemini-(\d+(?:\.\d+)?)", n)
-            return (float(m.group(1)) if m else 0, "preview" not in n, "latest" in n)
+            return (float(m.group(1)) if m else 0, "lite" not in n, "preview" not in n)
+        flash = sorted(flash, key=ver, reverse=True)
         if flash:
-            best = sorted(flash, key=ver)[-1]
-            print(f"Gemini model: {best}")
-            return best
+            print(f"Gemini models to try: {', '.join(flash[:4])}")
+            return flash
     except Exception as e:
         print(f"Couldn't list Gemini models ({e})")
-    return "gemini-flash-latest"
+    return ["gemini-flash-latest", "gemini-flash-lite-latest"]
 
 
 def build_script(story):

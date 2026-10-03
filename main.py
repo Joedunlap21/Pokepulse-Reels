@@ -147,6 +147,12 @@ RETAILERS = ["Pokemon Center", "GameStop", "Best Buy", "Target", "Walmart", "Cos
              "Barnes & Noble", "Five Below", "Hot Topic", "BoxLunch", "Macy's", "EB Games", "JB Hi-Fi", "Meijer",
              "Walgreens", "CVS", "Dollar General", "McDonald's", "Play! Pokemon Stores", "local game stores"]
 MONTHS = r"(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan\.?|Feb\.?|Mar\.?|Apr\.?|Jun\.?|Jul\.?|Aug\.?|Sept?\.?|Oct\.?|Nov\.?|Dec\.?)"
+# Articles for tournament players, not collectors - skip these
+NOT_COLLECTOR = ["deck list", "decklist", "deck profile", "deck guide", "regional championship", "regionals",
+                 "world championships", "tournament report", "top 8", "top cut", "meta", "standard format",
+                 "rotation", "strategy", "matchup", "tier list", "carpe diem", "here, and i am", "writing another article",
+                 "pokemon tcg live", "pokemon go", "pokemon unite", "video game", "anime episode"]
+
 JUNK = ["open media", "tap to unmute", "follow along with the video", "this feature may not be available",
         "launched pokebeach", "is a fansite", "follow us", "thank you very much", "patreon", "subscribe",
         "click here", "sign up", "newsletter", "cookie", "yesterday at", "{\"@", "please make sure",
@@ -445,9 +451,9 @@ VARIANT_NAMES = {"normal": "", "holofoil": "HOLO", "reverseHolofoil": "REVERSE H
                  "1stEditionNormal": "1ST EDITION", "1stEditionHolofoil": "1ST EDITION HOLO"}
 
 def build_bulk_story(captions):
-    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 10}).get("data", [])
+    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 15}).get("data", [])
     sets = [s for s in sets if (s.get("total") or 0) >= 60 and "promo" not in s.get("name", "").lower()]
-    for st in sets[:5]:
+    for st in sets[:10]:
         key = f"bulk gold: {st['name']}".lower()
         if any(key in c for c in captions):
             print(f"Bulk Gold already done for {st['name']}")
@@ -570,6 +576,10 @@ def build_story():
             print(f"{len(articles)} recent card-related articles found")
         for art in articles:
             if already_posted(art["title"], posted, captions):
+                continue
+            head = (art["title"] + " " + art["desc"] + " " + " ".join(art["paras"][:2])).lower()
+            if any(re.search(r"\b" + re.escape(w) + r"\b", head) for w in NOT_COLLECTOR):
+                print(f"Skipping (not collector news): {art['title']}")
                 continue
             blob = " ".join([art["title"], art["desc"]] + art["paras"][:6] + art["items"])
             if topic == "drops":
