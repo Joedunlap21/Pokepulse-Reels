@@ -9,9 +9,18 @@ on:
         default: ''
         type: choice
         options: ['', 'news', 'drops', 'sales', 'bulk']
+      dry_run:
+        description: 'Test only - make the video but DO NOT post it (download it from the run page)'
+        required: false
+        default: false
+        type: boolean
   schedule:
     # Times are UTC. 9:30am, 12:30pm, 5:30pm, 9:30pm Eastern (daylight time)
     - cron: '30 13,16,21,1 * * *'
+
+permissions:
+  contents: read
+  models: read   # free GitHub AI models for writing the voiceover script
 
 jobs:
   render_and_post_reel:
@@ -31,7 +40,7 @@ jobs:
 
       - name: Install Python dependencies
         run: |
-          pip install requests pillow cloudinary
+          pip install requests pillow cloudinary edge-tts
 
       - name: Generate & Publish Reel
         env:
@@ -41,5 +50,16 @@ jobs:
           IG_USER_ID_2: ${{ secrets.IG_USER_ID_2 }}
           IG_TOKEN_2: ${{ secrets.IG_TOKEN_2 }}
           POKEMONTCG_API_KEY: ${{ secrets.POKEMONTCG_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REEL_TOPIC: ${{ github.event.inputs.topic }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: python main.py
+
+      - name: Save video for download
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pokepulse-reel
+          path: pokepulse_reel.mp4
+          if-no-files-found: ignore
+          retention-days: 7
