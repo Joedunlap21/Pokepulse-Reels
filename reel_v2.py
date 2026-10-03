@@ -112,7 +112,9 @@ def ai_script(story):
         "Start straight with the news itself. Never open with filler like 'Okay', 'So', 'Guys', 'Yo', "
         "'This one's wild', 'You won't believe', 'Listen up'.\n"
         "The last slide should land the point (why it matters / what to do).\n"
-        'Reply with JSON only: {"slides": [{"say": "...", "screen": "..."}]}\n\n'
+        "Also write \"thumb\": the Reel cover text, 2-5 words, ALL CAPS, clickbait that makes people tap "
+        "(curiosity, a number, a price, urgency) but 100% true to the source - no fake claims.\n"
+        'Reply with JSON only: {"thumb": "...", "slides": [{"say": "...", "screen": "..."}]}\n\n'
         f"FULL ARTICLE CONTEXT:\n{story.get('context', '')[:3000]}\n\n"
         "SLIDES:\n" + "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
     )
@@ -129,7 +131,11 @@ def ai_script(story):
             return None
         content = r.json()["candidates"][0]["content"]["parts"][0]["text"]
         m = re.search(r"\{.*\}", content, re.S)
-        slides = json.loads(m.group(0))["slides"]
+        data = json.loads(m.group(0))
+        slides = data["slides"]
+        thumb = re.sub(r"\s+", " ", str(data.get("thumb", ""))).strip().upper()
+        if thumb and len(thumb.split()) <= 7:
+            story["thumb_text"] = thumb
         out = [{"say": re.sub(r"\s+", " ", str(x.get("say", ""))).strip(),
                 "screen": re.sub(r"\s+", " ", str(x.get("screen", ""))).strip().upper()} for x in slides]
         if len(out) != len(facts) or any(not x["say"] or not x["screen"] or len(x["say"].split()) > 22
@@ -496,6 +502,78 @@ def render_broll_clip(video, scene, idx, words, dur, out, screen_text=None):
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", out], check=True)
 
 
+# ---------------------------------------------------------------- cover / thumbnail
+
+def default_thumb(story):
+    t = story.get("topic")
+    sc0 = story["scenes"][0]
+    if t == "bulk":
+        return "YOUR BULK IS WORTH $$$"
+    if t == "chase":
+        prices = [re.search(r"\$[\d,]+", s.get("sub", "")) for s in story["scenes"][1:]]
+        top = max([p.group(0) for p in prices if p] or ["$"], key=lambda x: float(x.strip("$").replace(",", "") or 0))
+        return f"THIS CARD IS {top}+" if top != "$" else "TOP CHASE CARDS"
+    words = _shorten(sc0["text"], 5).rstrip(".").upper()
+    return words
+
+
+def make_cover(story, path="cover.jpg"):
+    """Clickbait cover: big art, dark vignette, huge 2-5 word hook. Key area kept inside the 4:5 grid crop."""
+    text = story.get("thumb_text") or default_thumb(story)
+    sc = story["scenes"][1] if story.get("topic") in ("bulk", "chase") and len(story["scenes"]) > 1 else story["scenes"][0]
+    if story.get("topic") == "chase":
+        sc = story["scenes"][-1]           # #1 most valuable card
+    img = Image.new("RGB", (W, H), BG)
+    raw = load_image(sc["img_url"])
+    if raw is not None:
+        s_ = max(W / raw.width, H / raw.height)
+        cover = raw.resize((int(raw.width * s_) + 1, int(raw.height * s_) + 1), Image.Resampling.LANCZOS)
+        l, t = (cover.width - W) // 2, (cover.height - H) // 2
+        img = cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(18))
+        img = Image.blend(img, Image.new("RGB", (W, H), BG), 0.5)
+        art = raw.copy()
+        s_ = min(980 / art.width, 900 / art.height)
+        art = art.resize((int(art.width * s_), int(art.height * s_)), Image.Resampling.LANCZOS)
+        glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        gx, gy = (W - art.width) // 2, 820
+        ImageDraw.Draw(glow).rounded_rectangle([gx - 18, gy - 18, gx + art.width + 18, gy + art.height + 18],
+                                               radius=30, fill=(255, 230, 0, 210))
+        img = Image.alpha_composite(img.convert("RGBA"), glow.filter(ImageFilter.GaussianBlur(22))).convert("RGB")
+        img.paste(art, (gx, gy))
+    d = ImageDraw.Draw(img)
+    # hook text, top half of the 4:5 safe area
+    words = text.split()
+    for size in range(230, 100, -10):
+        f, stroke = get_font(size), max(8, size // 12)
+        lines, cur = [], []
+        for w in words:
+            if cur and text_w(d, " ".join(cur + [w]), f, stroke) > 1000:
+                lines.append(cur); cur = []
+            cur.append(w)
+        if cur:
+            lines.append(cur)
+        if len(lines) <= 3 and len(lines) * size * 0.95 <= 560:
+            break
+    y = 250 + (560 - int(len(lines) * size * 0.95)) // 2
+    for n, ln in enumerate(lines):
+        line = " ".join(ln)
+        x = (W - text_w(d, line, f, stroke)) // 2
+        d.text((x + 8, y + 10), line, font=f, fill="#000000", stroke_width=stroke, stroke_fill="#000000")
+        d.text((x, y), line, font=f, fill=YELLOW if n % 2 == 0 else WHITE, stroke_width=stroke, stroke_fill="#000000")
+        y += int(size * 0.95)
+    # red banner
+    tag = {"news": "BREAKING", "drops": "NEW DROP", "sales": "BIG SALE", "bulk": "CHECK YOUR BULK",
+           "chase": "TOP CHASE CARDS"}.get(story.get("topic"), "POKEPULSE")
+    tf = get_font(80)
+    tw = text_w(d, tag, tf) + 80
+    x = (W - tw) // 2
+    d.rounded_rectangle([x, 140, x + tw, 240], radius=16, fill=RED)
+    d.text((x + 40, 150), tag, font=tf, fill=WHITE)
+    img.save(path, quality=92)
+    print(f"Cover: '{text}'")
+    return path
+
+
 # ---------------------------------------------------------------- build
 
 CTA_LINE = "Want the full weekly breakdown? It's free. Link in bio."
@@ -585,6 +663,10 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
                    ["-filter_complex", afc, "-map", "0:v", "-map", "[aout]",
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", str(FPS),
                     "-c:a", "aac", "-b:a", "192k", "-t", f"{total:.3f}", output_mp4], check=True)
+    try:
+        make_cover(story, "cover.jpg")
+    except Exception as e:
+        print(f"Cover failed ({e})")
     return output_mp4
 
 

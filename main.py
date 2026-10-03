@@ -740,13 +740,14 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
 
 # ---------------------------------------------------------------- publishing
 
-def publish_to_account(video_url, caption, graph, user_id, access_token, label):
+def publish_to_account(video_url, caption, graph, user_id, access_token, label, cover_url=None):
     print(f"\n===== Posting to {label} =====")
     print("Step 1: Publishing Reel to Instagram...")
     res = requests.post(f"{graph}/{user_id}/media", data={
         "media_type": "REELS",
         "video_url": video_url,
         "caption": caption,
+        **({"cover_url": cover_url} if cover_url else {}),
         "access_token": access_token
     }).json()
 
@@ -806,7 +807,7 @@ def second_account():
         return None
     return (GRAPH, user_id, token, "second account (@pokepulse.io)")
 
-def publish_content(video_url, caption):
+def publish_content(video_url, caption, cover_url=None):
     accounts = []
     token1 = os.getenv("IG_ACCESS_TOKEN", "").strip()
     if token1:
@@ -818,7 +819,7 @@ def publish_content(video_url, caption):
     any_ok = False
     for graph, uid, tok, label in accounts:
         try:
-            ok = publish_to_account(video_url, caption, graph, uid, tok, label)
+            ok = publish_to_account(video_url, caption, graph, uid, tok, label, cover_url)
         except Exception as e:
             print(f"{label} failed: {e}")
             ok = False
@@ -840,20 +841,35 @@ if __name__ == "__main__":
         print(f"Voiced reel failed ({e}) - falling back to classic slideshow")
         mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
 
+    cover_url = None
+    if os.path.exists("cover.jpg"):
+        try:
+            cover_url = cloudinary.uploader.upload("cover.jpg", folder="pokepulse_covers").get("secure_url")
+            print(f"Cover uploaded: {cover_url}")
+        except Exception as e:
+            print(f"Cover upload failed ({e}) - posting without custom cover")
+
     if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes"):
-        print("DRY RUN - video saved as pokepulse_reel.mp4, nothing posted.")
-        print("CAPTION:\n" + story["caption_full"])
+        print("DRY RUN - nothing posted.")
+        sheet_url = vid_url = ""
         try:
             # contact sheet: one frame every second, so the whole reel can be reviewed at a glance
             subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", mp4_file, "-vf",
                             "fps=1,scale=270:-1,tile=6x4:padding=4:color=white", "-frames:v", "1",
                             "test_sheet.jpg"], check=True)
-            sheet = cloudinary.uploader.upload("test_sheet.jpg", folder="pokepulse_tests")
-            vid = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_tests")
-            print(f"TEST SHEET: {sheet.get('secure_url')}")
-            print(f"TEST VIDEO: {vid.get('secure_url')}")
+            sheet_url = cloudinary.uploader.upload("test_sheet.jpg", folder="pokepulse_tests").get("secure_url")
+            vid_url = cloudinary.uploader.upload_large(mp4_file, resource_type="video",
+                                                       folder="pokepulse_tests").get("secure_url")
         except Exception as e:
             print(f"Couldn't upload test preview: {e}")
+        print(f"TEST SHEET: {sheet_url}\nTEST VIDEO: {vid_url}\nTEST COVER: {cover_url}")
+        summary = os.getenv("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as f:
+                f.write(f"## Test reel: {story['story_id']}\n\n**Topic:** {story.get('topic')}\n\n"
+                        f"[▶ Watch the video]({vid_url})\n\n**Cover:**\n\n![cover]({cover_url})\n\n"
+                        f"**Every second of the reel:**\n\n![sheet]({sheet_url})\n\n"
+                        f"**Caption:**\n\n```\n{story['caption_full']}\n```\n")
         sys.exit(0)
 
     print("Uploading to Cloudinary CDN...")
@@ -861,6 +877,6 @@ if __name__ == "__main__":
     video_cdn_url = upload_res.get("secure_url")
     print(f"CDN URL: {video_cdn_url}")
 
-    if publish_content(video_cdn_url, story["caption_full"]):
+    if publish_content(video_cdn_url, story["caption_full"], cover_url):
         with open("posted_news.txt", "a") as f:
             f.write(story["key"] + "\n")
