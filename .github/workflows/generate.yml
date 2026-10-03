@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
         type: choice
-        options: ['', 'news', 'drops', 'sales', 'bulk']
+        options: ['', 'news', 'drops', 'sales', 'bulk', 'chase']
       voice_mode:
         description: 'Voiceover: auto = news & sales only, on = always, off = music only'
         required: false
