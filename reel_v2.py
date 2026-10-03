@@ -2,8 +2,8 @@
 PokePulse Reel maker v2 - free voiceover + word-by-word captions.
 
   voice    : edge-tts (free Microsoft neural voices, no key)
-  script   : GitHub Models (free with GITHUB_TOKEN) rewrites lines short & punchy,
-             falls back to simple trimming if that's unavailable
+  script   : optional Google Gemini free tier (GEMINI_API_KEY) rewrites lines short & punchy,
+             otherwise simple trimming
   visuals  : big art + blurred fill, tag at top, captions in the IG safe zone
   audio    : voice on top, music ducked underneath
 
@@ -71,50 +71,43 @@ def fallback_lines(story):
 
 
 def ai_lines(story):
-    """Free rewrite through GitHub Models. Returns None on any problem."""
-    token = os.getenv("GITHUB_TOKEN", "").strip()
-    if not token:
+    """Optional free rewrite with Google Gemini (free API key from aistudio.google.com).
+    Returns None if no key or anything goes wrong -> simple trimming is used instead."""
+    key = os.getenv("GEMINI_API_KEY", "").strip()
+    if not key:
         return None
     facts = [sc["text"] + (f" ({sc['sub']})" if sc.get("sub") else "") for sc in story["scenes"]]
     prompt = (
         "You write voiceover for a fast Pokemon TCG news Instagram Reel.\n"
         f"Rewrite each of these {len(facts)} slides into ONE short spoken line.\n"
         "Rules: max 14 words per line, punchy and hype but factual, no hashtags, no emojis, "
-        "never invent facts, prices or dates that aren't given, write numbers how they're spoken is fine. "
+        "never invent facts, prices or dates that aren't given. "
         "Line 1 is the hook - make people stop scrolling.\n"
         'Reply with JSON only: {"lines": ["...", "..."]}\n\n'
         + "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
     )
-    endpoints = [
-        ("https://models.github.ai/inference/chat/completions", os.getenv("REEL_AI_MODEL", "openai/gpt-4.1-mini")),
-    ]
-    for url, model in endpoints:
-        try:
-            r = requests.post(
-                url,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json={"model": model,
-                      "messages": [{"role": "system", "content": "You reply with valid JSON only."},
-                                   {"role": "user", "content": prompt}],
-                      "temperature": 0.6},
-                timeout=45)
-            if r.status_code != 200 or not r.text.strip():
-                print(f"AI script: {url} -> HTTP {r.status_code} {r.text[:200]!r}")
-                continue
-            content = r.json()["choices"][0]["message"]["content"] or ""
-            m = re.search(r"\{.*\}", content, re.S)
-            lines = [re.sub(r"\s+", " ", str(l)).strip() for l in json.loads(m.group(0))["lines"]]
-            if len(lines) != len(facts) or any(not l or len(l.split()) > 22 for l in lines):
-                print(f"AI script rejected (got {len(lines)} lines)")
-                continue
-            print(f"AI script: {model}")
-            return lines
-        except Exception as e:
-            body = locals().get("r")
-            info = f" HTTP {body.status_code} {body.headers.get('content-type')} {body.text[:300]!r}" if body is not None else ""
-            print(f"AI script: {url} failed ({e}){info}")
-    print("AI script unavailable - using simple trimming")
-    return None
+    model = os.getenv("REEL_AI_MODEL", "gemini-2.5-flash")
+    try:
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            params={"key": key},
+            json={"contents": [{"parts": [{"text": prompt}]}],
+                  "generationConfig": {"temperature": 0.6, "responseMimeType": "application/json"}},
+            timeout=45)
+        if r.status_code != 200:
+            print(f"AI script: Gemini HTTP {r.status_code} {r.text[:200]!r}")
+            return None
+        content = r.json()["candidates"][0]["content"]["parts"][0]["text"]
+        m = re.search(r"\{.*\}", content, re.S)
+        lines = [re.sub(r"\s+", " ", str(l)).strip() for l in json.loads(m.group(0))["lines"]]
+        if len(lines) != len(facts) or any(not l or len(l.split()) > 22 for l in lines):
+            print(f"AI script rejected (got {len(lines)} lines)")
+            return None
+        print(f"AI script: {model}")
+        return lines
+    except Exception as e:
+        print(f"AI script failed ({e}) - using simple trimming")
+        return None
 
 
 # ---------------------------------------------------------------- voice
