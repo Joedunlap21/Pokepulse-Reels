@@ -489,9 +489,9 @@ def build_bulk_story(captions):
 
 def build_chase_story(captions):
     """Top Chase Cards: the most valuable cards in a recent set (TCGplayer market price)."""
-    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 10}).get("data", [])
+    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 15}).get("data", [])
     sets = [s for s in sets if (s.get("total") or 0) >= 60 and "promo" not in s.get("name", "").lower()]
-    for st in sets[:5]:
+    for st in sets[:10]:
         key = f"top chase cards: {st['name']}".lower()
         if any(key in c for c in captions):
             print(f"Chase cards already done for {st['name']}")

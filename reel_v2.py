@@ -116,7 +116,7 @@ def ai_script(story):
         f"FULL ARTICLE CONTEXT:\n{story.get('context', '')[:3000]}\n\n"
         "SLIDES:\n" + "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
     )
-    model = os.getenv("REEL_AI_MODEL", "").strip() or "gemini-2.5-flash"
+    model = os.getenv("REEL_AI_MODEL", "").strip() or pick_gemini_model(key)
     try:
         r = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
@@ -141,6 +141,26 @@ def ai_script(story):
     except Exception as e:
         print(f"AI script failed ({e}) - using simple trimming")
         return None
+
+
+def pick_gemini_model(key):
+    """Google retires model names often - ask which 'flash' models this key can use and take the newest."""
+    try:
+        r = requests.get("https://generativelanguage.googleapis.com/v1beta/models",
+                         params={"key": key, "pageSize": 200}, timeout=20)
+        names = [m["name"].split("/")[-1] for m in r.json().get("models", [])
+                 if "generateContent" in m.get("supportedGenerationMethods", [])]
+        flash = [n for n in names if "flash" in n and not any(x in n for x in ("lite", "image", "tts", "live", "audio", "thinking", "exp"))]
+        def ver(n):
+            m = re.search(r"gemini-(\d+(?:\.\d+)?)", n)
+            return (float(m.group(1)) if m else 0, "preview" not in n, "latest" in n)
+        if flash:
+            best = sorted(flash, key=ver)[-1]
+            print(f"Gemini model: {best}")
+            return best
+    except Exception as e:
+        print(f"Couldn't list Gemini models ({e})")
+    return "gemini-flash-latest"
 
 
 def build_script(story):
@@ -379,6 +399,7 @@ def get_broll(topic, out="v2_broll.mp4"):
         print(f"B-roll: your clip {pick}")
         return pick
     if not pexels_key:
+        print("B-roll: none (add a PEXELS_API_KEY secret or put clips in the clips folder)")
         return None
     try:
         q = random.choice(BROLL_QUERIES.get(topic, BROLL_QUERIES["news"]))
