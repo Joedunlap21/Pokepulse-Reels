@@ -819,6 +819,97 @@ def draw_price_box(img, pr):
     center("TCGPLAYER • TREND: CARDMARKET", y1 - 70, 30, (255, 255, 255, 120))
     return Image.alpha_composite(img.convert("RGBA"), layer).convert("RGB")
 
+COVER_LABELS = {"news": "POKÉMON NEWS", "drops": "DROP ALERT", "sales": "BIG SALE",
+                "bulk": "BULK GOLD", "chase": "CHASE CARDS"}
+
+def make_cover(story, out_path="cover.jpg"):
+    """Scroll-stopping thumbnail: big art, red label, huge 2-3 line headline with one yellow word,
+    and the top price for card posts. Key stuff sits in the middle so the 3:4 profile-grid crop keeps it."""
+    topic = story.get("topic", "news")
+    first = story["scenes"][0]
+    raw = load_image(first["img_url"])
+    base = Image.new("RGB", (W, H), BG)
+    if raw is not None:
+        cover = raw.copy()
+        sc = max(W / cover.width, H / cover.height)
+        cover = cover.resize((int(cover.width * sc) + 1, int(cover.height * sc) + 1), Image.Resampling.LANCZOS)
+        l, t = (cover.width - W) // 2, (cover.height - H) // 2
+        base = Image.blend(cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(30)),
+                           Image.new("RGB", (W, H), BG), 0.45)
+        art = raw.copy()
+        art.thumbnail((880, 740), Image.Resampling.LANCZOS)
+        ax, ay = (W - art.width) // 2, 390 + (740 - art.height) // 2
+        sh = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+        ImageDraw.Draw(sh).rounded_rectangle([ax + 12, ay + 20, ax + art.width + 12, ay + art.height + 20],
+                                             radius=20, fill=(0, 0, 0, 210))
+        base = Image.alpha_composite(base.convert("RGBA"), sh.filter(ImageFilter.GaussianBlur(24))).convert("RGB")
+        base.paste(art, (ax, ay))
+    # dark fade behind the headline
+    fade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    fd = ImageDraw.Draw(fade)
+    for y in range(1000, H):
+        a = min(255, int(255 * ((y - 1000) / 320) ** 1.2))
+        fd.line([(0, y), (W, y)], fill=BG + (a,))
+    base = Image.alpha_composite(base.convert("RGBA"), fade)
+    d = ImageDraw.Draw(base)
+
+    # red label pill near the top of the grid-safe area
+    label = COVER_LABELS.get(topic, "POKÉPULSE")
+    lf = get_font(76)
+    lw = text_w(d, label, lf) + 70
+    lx = (W - lw) // 2
+    d.rounded_rectangle([lx + 5, 265, lx + lw + 5, 365], radius=12, fill=(0, 0, 0, 255))
+    d.rounded_rectangle([lx, 260, lx + lw, 360], radius=12, fill=RED)
+    d.text((lx + 35, 268), label, font=lf, fill=WHITE)
+
+    # headline
+    prices = [sc_["prices"]["market"] for sc_ in story["scenes"] if sc_.get("prices")]
+    set_name = ""
+    m = re.search(r"IN (.+)$|^CHECK YOUR BULK! (.+?) COMMONS", first.get("text", ""))
+    if m:
+        set_name = (m.group(1) or m.group(2) or "").strip()
+    if topic == "chase":
+        head, small = f"TOP {len(prices) or 3} CHASE CARDS", set_name
+    elif topic == "bulk":
+        head, small = "YOUR BULK IS WORTH MONEY", set_name
+    else:
+        words = first.get("text", "").split()
+        head, small = " ".join(words[:7]), ""
+    words = head.split()
+    hot = [i for i, w in enumerate(words) if re.search(r"[\d$]", w)] or \
+          [max(range(len(words)), key=lambda i: len(words[i]))]
+    extra = (110 if prices else 0) + (70 if small else 0)
+    size = 200
+    while size > 90:   # biggest size that fits under the art (1160..1670) in max 3 lines
+        hf = get_font(size)
+        lines = wrap_words(d, head, hf, W - 100, 8)
+        if len(lines) <= 3 and len(lines) * int(size * 0.95) + extra <= 510:
+            break
+        size -= 6
+    lh = int(size * 0.95)
+    block = len(lines) * lh + extra
+    y = 1670 - block
+    k = 0
+    for line in lines:
+        lw_ = text_w(d, line, hf, 8)
+        x = (W - lw_) // 2
+        for w in line.split():
+            d.text((x, y), w, font=hf, fill=YELLOW if k in hot else WHITE, stroke_width=8, stroke_fill="#000000")
+            x += text_w(d, w + " ", hf, 8)
+            k += 1
+        y += lh
+    if prices:
+        pt = f"UP TO ${max(prices):,.0f}" if max(prices) >= 10 else f"UP TO ${max(prices):,.2f}"
+        pf = get_font(110)
+        d.text(((W - text_w(d, pt, pf, 6)) // 2, y + 6), pt, font=pf, fill=GREEN, stroke_width=6, stroke_fill="#000000")
+        y += 110
+    if small:
+        sf = get_font(64)
+        d.text(((W - text_w(d, small, sf, 4)) // 2, y + 10), small, font=sf, fill=WHITE, stroke_width=4,
+               stroke_fill="#000000")
+    base.convert("RGB").save(out_path, quality=92)
+    return out_path
+
 def make_cta_slide(out_path="f_cta.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     base = Image.new("RGB", (W, H), BG)
@@ -1001,6 +1092,12 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Voiced reel failed ({e}) - falling back to classic slideshow")
         mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
+
+    try:
+        make_cover(story, "cover.jpg")   # our own thumbnail (replaces any auto cover)
+        print("Built thumbnail cover.jpg")
+    except Exception as e:
+        print(f"Thumbnail failed ({e}) - using whatever cover exists")
 
     cover_url = None
     if os.path.exists("cover.jpg"):
