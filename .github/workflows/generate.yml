@@ -9,6 +9,18 @@ on:
         default: ''
         type: choice
         options: ['', 'news', 'drops', 'sales', 'bulk']
+      voice_mode:
+        description: 'Voiceover: auto = news & sales only, on = always, off = music only'
+        required: false
+        default: 'auto'
+        type: choice
+        options: ['auto', 'on', 'off']
+      voice:
+        description: 'Voice (run "Voice Samples" to hear them all)'
+        required: false
+        default: ''
+        type: choice
+        options: ['', 'random', 'en-US-AndrewMultilingualNeural', 'en-US-BrianMultilingualNeural', 'en-US-AvaMultilingualNeural', 'en-US-EmmaMultilingualNeural', 'en-US-ChristopherNeural', 'en-US-SteffanNeural', 'en-GB-RyanNeural', 'en-AU-WilliamNeural']
       dry_run:
         description: 'Test only - make the video but DO NOT post it (download it from the run page)'
         required: false
@@ -52,6 +64,9 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REEL_TOPIC: ${{ github.event.inputs.topic }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
+          REEL_VOICE_MODE: ${{ github.event.inputs.voice_mode }}
+          # To change the voice for scheduled posts, set a repo VARIABLE named REEL_VOICE
+          REEL_VOICE: ${{ github.event.inputs.voice || vars.REEL_VOICE }}
         run: python main.py
 
       - name: Save video for download
