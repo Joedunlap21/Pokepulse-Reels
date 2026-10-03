@@ -585,6 +585,10 @@ def download(url, out):
             f.write(r.content)
         im = Image.open(out)
         im.load()
+        if im.mode in ("RGBA", "LA", "P") and "A" in im.convert("RGBA").getbands():
+            rgba = im.convert("RGBA")
+            if rgba.getextrema()[3][0] < 200:      # real transparency -> keep the cut-out
+                return rgba
         return im.convert("RGB")
     except Exception as e:
         print(f"  image failed {url[:80]}: {e}")
@@ -594,6 +598,9 @@ def download(url, out):
 def prep_product(im, out):
     """Plain/white background -> cut the product out. Busy photo -> clean rounded card."""
     im.thumbnail((1400, 1400))
+    if im.mode == "RGBA":                          # already a transparent cut-out (official product PNGs)
+        im.crop(im.getbbox()).save(out)
+        return out
     a = np.array(im).astype(np.int16)
     h, w = a.shape[:2]
     b = max(4, int(min(h, w) * 0.03))
@@ -687,10 +694,15 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
             continue
         if bg_path is None:
             bg_path = os.path.join(work, "bg.jpg")
-            im.save(bg_path, quality=92)
+            im.convert("RGB").save(bg_path, quality=92)
         prods.append(prep_product(im, os.path.join(work, f"prod_{i}.png")))
     if not prods:
         raise RuntimeError("no usable product images")
+    if story.get("bg_url"):                        # e.g. the official 16:9 product banner
+        im = download(story["bg_url"], os.path.join(work, "raw_bg"))
+        if im is not None:
+            bg_path = os.path.join(work, "bg.jpg")
+            im.convert("RGB").save(bg_path, quality=92)
 
     # background: your clips / free store b-roll if available, else the blurred hero picture
     bg = bg_path

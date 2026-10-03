@@ -468,6 +468,84 @@ def build_inside_story(art):
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
             "caption_full": "\n".join(lines)}
 
+# Official product pages: launch date + exact "includes" list + official pictures
+GALLERY = "https://www.pokemon.com/us/pokemon-tcg/product-gallery"
+
+def parse_gallery(url):
+    page = get_html(url)
+    i = page.find("<article")
+    art = page[i:page.find("</article>", i)] if i >= 0 else page
+    h1 = re.findall(r"<h1[^>]*>(.*?)</h1>", art, re.S)
+    title = clean_text(re.sub(r"<[^>]+>", " ", h1[0])) if h1 else clean_text((meta_all(page, "og:title") or [""])[0])
+    title = re.split(r"\s+\|\s+", title)[0].strip()
+    m = re.search(r"Launch:\s*([A-Za-z]+\s+\d{1,2},\s*\d{4})", re.sub(r"<[^>]+>", " ", art))
+    launch = None
+    if m:
+        try:
+            launch = datetime.strptime(re.sub(r"\s+", " ", m.group(1)), "%B %d, %Y").replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    items = [clean_text(re.sub(r"<[^>]+>", " ", x)) for x in re.findall(r"<li[^>]*>(.*?)</li>", art, re.S)]
+    items = [x for x in items if x and len(x) < 140]
+    paras = [clean_text(re.sub(r"<[^>]+>", " ", x)) for x in re.findall(r"<p[^>]*>(.*?)</p>", art, re.S)]
+    paras = [p for p in paras if len(p.split()) >= 5]
+    imgs = []
+    for u in re.findall(r'<img[^>]+src="([^"]+)"', art):
+        u = html.unescape(u)
+        u = "https://www.pokemon.com" + u if u.startswith("/") else u
+        if "/inline/" in u and u not in imgs:
+            imgs.append(u)
+    og = (meta_all(page, "og:image") or [""])[0]
+    return {"url": url, "title": title, "launch": launch, "items": items, "paras": paras, "images": imgs, "og": og}
+
+def build_gallery_inside_story(captions, posted):
+    """Next upcoming official product we haven't posted yet, with exactly what's inside."""
+    try:
+        listing = get_html(GALLERY)
+    except Exception as e:
+        print(f"Product gallery failed: {e}")
+        return None
+    links = []
+    for h in re.findall(r'href="((?:https://www\.pokemon\.com)?/us/pokemon-tcg/product-gallery/[a-z0-9\-]+)"', listing):
+        h = h if h.startswith("http") else "https://www.pokemon.com" + h
+        if h not in links:
+            links.append(h)
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    cands = []
+    for u in links[:30]:
+        try:
+            p = parse_gallery(u)
+        except Exception as e:
+            print(f"  gallery page failed {u}: {e}")
+            continue
+        if not p["launch"] or p["launch"] < today or len(p["items"]) < 2 or not (p["images"] or p["og"]):
+            continue
+        if already_posted(p["title"], posted, captions):
+            continue
+        cands.append(p)
+    if not cands:
+        print("No upcoming official products left to post")
+        return None
+    p = min(cands, key=lambda x: x["launch"])
+    when = p["launch"].strftime("%B ") + str(p["launch"].day)
+    name = re.sub(r"^Pok[eé]mon TCG:\s*", "", p["title"])
+    pool = p["images"] + ([p["og"]] if p["og"] else [])
+    scenes = [{"tag": "WHAT'S INSIDE", "img_url": pool[0], "text": name.upper(), "colors": [YELLOW, WHITE]},
+              {"tag": "WHAT'S INSIDE", "img_url": pool[0], "text": "\n".join(fit_list(p["items"], 30)).upper(),
+               "colors": [WHITE, YELLOW]},
+              {"tag": "RELEASE DATE", "img_url": pool[-1], "text": f"LAUNCHES {when.upper()}", "colors": [YELLOW, WHITE]}]
+    context = (f"{p['title']}. Launch: {p['launch'].strftime('%B %d, %Y')} ({when}). Includes: "
+               + "; ".join(p["items"]) + ". " + " ".join(p["paras"]))
+    cap = [f"📦 WHAT'S INSIDE: {p['title']}", "", "Inside the box:"] + [f"• {x}" for x in p["items"]] + \
+          ["", f"📅 Launches {p['launch'].strftime('%B %d, %Y')}", "", "Source: Pokemon.com", "",
+           "Are you picking this one up? 👇", "",
+           "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+           "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
+    print(f"Picked [inside] official product: {p['title']} (launch {when})")
+    return {"story_id": p["title"][:40], "key": p["title"].lower(), "scenes": scenes, "topic": "inside",
+            "context": context, "image_pool": pool[:-1] or pool, "bg_url": p["og"] or None,
+            "caption_full": "\n".join(cap)}
+
 # ---------------------------------------------------------------- topic: bulk gold
 
 TCG_API = "https://api.pokemontcg.io/v2"
@@ -720,6 +798,8 @@ def build_story():
     captions = recent_ig_captions()
     first = topic_for_now()
     order = [first] + [t for t in ["news", "drops", "inside", "sales"] if t != first]
+    if first == "inside":                       # no upcoming product? post a drop before plain news
+        order = ["inside", "drops", "news", "sales"]
     articles = None
 
     for topic in order:
@@ -730,6 +810,10 @@ def build_story():
                 story["topic"] = topic
                 return story
             continue
+        if topic == "inside":
+            story = build_gallery_inside_story(captions, posted)
+            if story:
+                return story
         if articles is None:
             articles = gather_articles()
             print(f"{len(articles)} recent card-related articles found")
