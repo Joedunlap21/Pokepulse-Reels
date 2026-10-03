@@ -37,7 +37,7 @@ FPS = 30
 
 # ---------------------------------------------------------------- script
 
-def _shorten(s, max_words=18):
+def _shorten(s, max_words=14):
     s = re.sub(r"^(according to (a report from )?[\w\s\.\-']+?,\s*)", "", s, flags=re.I)
     s = re.sub(r"\s*\([^)]*\)", "", s)
     s = s.strip().rstrip(".")
@@ -85,23 +85,29 @@ def ai_lines(story):
         'Reply with JSON only: {"lines": ["...", "..."]}\n\n'
         + "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
     )
+    raw = ""
     try:
         r = requests.post(
             "https://models.github.ai/inference/chat/completions",
-            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-            json={"model": os.getenv("REEL_AI_MODEL", "openai/gpt-4o-mini"),
-                  "messages": [{"role": "user", "content": prompt}], "temperature": 0.6},
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                     "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"},
+            json={"model": os.getenv("REEL_AI_MODEL", "openai/gpt-4.1-mini"),
+                  "messages": [{"role": "system", "content": "You reply with valid JSON only."},
+                               {"role": "user", "content": prompt}],
+                  "temperature": 0.6},
             timeout=45)
+        raw = r.text
         r.raise_for_status()
-        content = r.json()["choices"][0]["message"]["content"]
-        content = re.sub(r"^```(?:json)?|```$", "", content.strip()).strip()
-        lines = [re.sub(r"\s+", " ", str(l)).strip() for l in json.loads(content)["lines"]]
+        content = r.json()["choices"][0]["message"]["content"] or ""
+        m = re.search(r"\{.*\}", content, re.S)
+        lines = [re.sub(r"\s+", " ", str(l)).strip() for l in json.loads(m.group(0))["lines"]]
         if len(lines) != len(facts) or any(not l or len(l.split()) > 22 for l in lines):
             print(f"AI script rejected (got {len(lines)} lines)")
             return None
+        print("AI script: GitHub Models")
         return lines
     except Exception as e:
-        print(f"AI script unavailable ({e}) - using simple trimming")
+        print(f"AI script unavailable ({e}) - using simple trimming. Response: {raw[:300]!r}")
         return None
 
 
