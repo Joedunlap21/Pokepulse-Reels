@@ -38,6 +38,8 @@ jobs:
           CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          IG_USER_ID_2: ${{ secrets.IG_USER_ID_2 }}
+          IG_TOKEN_2: ${{ secrets.IG_TOKEN_2 }}
           POKEMONTCG_API_KEY: ${{ secrets.POKEMONTCG_API_KEY }}
           REEL_TOPIC: ${{ github.event.inputs.topic }}
         run: python main.py
