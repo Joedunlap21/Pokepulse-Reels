@@ -87,7 +87,6 @@ def ai_lines(story):
     )
     endpoints = [
         ("https://models.github.ai/inference/chat/completions", os.getenv("REEL_AI_MODEL", "openai/gpt-4.1-mini")),
-        ("https://models.inference.ai.azure.com/chat/completions", "gpt-4o-mini"),
     ]
     for url, model in endpoints:
         try:
@@ -111,7 +110,9 @@ def ai_lines(story):
             print(f"AI script: {model}")
             return lines
         except Exception as e:
-            print(f"AI script: {url} failed ({e})")
+            body = locals().get("r")
+            info = f" HTTP {body.status_code} {body.headers.get('content-type')} {body.text[:300]!r}" if body is not None else ""
+            print(f"AI script: {url} failed ({e}){info}")
     print("AI script unavailable - using simple trimming")
     return None
 
