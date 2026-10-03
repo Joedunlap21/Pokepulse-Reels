@@ -10,7 +10,7 @@ on:
         type: choice
         options: ['', 'news', 'drops', 'sales', 'bulk', 'chase']
       voice_mode:
-        description: 'Voiceover: auto = news & sales only, on = always, off = music only'
+        description: 'Voiceover: auto = the 9:30am & 5:30pm posts, on = always, off = music only'
         required: false
         default: 'auto'
         type: choice
