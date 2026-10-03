@@ -535,6 +535,77 @@ def build_chase_story(captions):
         return {"story_id": f"chase {st['name']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap)}
     return None
 
+
+# ---------------------------------------------------------------- extra images
+
+_POKEMON_NAMES = None
+
+def pokemon_names():
+    global _POKEMON_NAMES
+    if _POKEMON_NAMES is None:
+        try:
+            r = requests.get("https://pokeapi.co/api/v2/pokemon-species?limit=1200", timeout=20).json()
+            _POKEMON_NAMES = [x["name"].replace("-", " ") for x in r.get("results", [])]
+        except Exception as e:
+            print(f"Couldn't load Pokemon names ({e})")
+            _POKEMON_NAMES = []
+    return _POKEMON_NAMES
+
+
+def card_images(query, n=6):
+    data = tcg_get("cards", {"q": query, "pageSize": 60, "orderBy": "-set.releaseDate",
+                             "select": "id,name,rarity,images,tcgplayer"}).get("data", [])
+    good = [c for c in data if (c.get("rarity") or "").lower() not in ("common", "uncommon", "")]
+    good = good or data
+    good.sort(key=lambda c: -best_market(c)[0])
+    pool = good[:max(n * 2, 10)]
+    random.shuffle(pool)
+    return [(c.get("images") or {}).get("large") for c in pool[:n] if (c.get("images") or {}).get("large")]
+
+
+def extra_images(art, need):
+    """Real card art to fill slides when an article doesn't have enough pictures."""
+    text = (art["title"] + " " + art["desc"] + " " + " ".join(art["paras"][:6])).lower().replace("pokémon", "pokemon")
+    found = []
+    # 1. a set the article talks about
+    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 40}).get("data", [])
+    for st in sets:
+        if st.get("name") and st["name"].lower() in text:
+            found += card_images(f'set.id:{st["id"]}', need)
+            print(f"Extra images: cards from {st['name']}")
+            break
+    # 2. Pokemon named in the title / first paragraphs
+    if len(found) < need:
+        title = (art["title"] + " " + art["desc"]).lower()
+        names = [nm for nm in pokemon_names() if len(nm) > 3 and re.search(r"\b" + re.escape(nm) + r"\b", title)]
+        for nm in names[:3]:
+            found += card_images(f'name:"{nm}"', 3)
+            print(f"Extra images: {nm} cards")
+            if len(found) >= need:
+                break
+    # 3. hottest cards from the newest set that has them
+    if len(found) < need:
+        for st in sets[:6]:
+            imgs = card_images(f'set.id:{st["id"]}', need - len(found))
+            if imgs:
+                found += imgs
+                print(f"Extra images: hot cards from {st['name']}")
+                break
+    return found
+
+
+def vary_images(story, art):
+    """Give every slide its own picture: article images first, then card art."""
+    scenes = story["scenes"]
+    own = list(dict.fromkeys(art["images"]))
+    need = len(scenes) - len(own)
+    extras = extra_images(art, need + 2) if need > 0 else []
+    pool = own + [u for u in extras if u not in own]
+    if len(pool) < 2:
+        return
+    for i, sc in enumerate(scenes):
+        sc["img_url"] = pool[i % len(pool)]
+
 # ---------------------------------------------------------------- topic picker
 
 TOPICS = ["news", "drops", "sales", "bulk", "chase"]
@@ -596,6 +667,10 @@ def build_story():
                 print(f"Picked [{topic}] {art['source']}: {art['title']}")
                 story["topic"] = topic
                 story["context"] = art["title"] + ". " + " ".join(all_sentences(art)[:12])
+                try:
+                    vary_images(story, art)
+                except Exception as e:
+                    print(f"Couldn't add extra images ({e})")
                 return story
     return None
 
