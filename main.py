@@ -486,9 +486,52 @@ def build_bulk_story(captions):
         return {"story_id": f"bulk {st['name']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap)}
     return None
 
+
+def build_chase_story(captions):
+    """Top Chase Cards: the most valuable cards in a recent set (TCGplayer market price)."""
+    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 10}).get("data", [])
+    sets = [s for s in sets if (s.get("total") or 0) >= 60 and "promo" not in s.get("name", "").lower()]
+    for st in sets[:5]:
+        key = f"top chase cards: {st['name']}".lower()
+        if any(key in c for c in captions):
+            print(f"Chase cards already done for {st['name']}")
+            continue
+        cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
+                                  "select": "id,name,number,rarity,images,set,tcgplayer"}).get("data", [])
+        ranked = []
+        for c in cards:
+            m, v = best_market(c)
+            img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
+            if m > 0 and img:
+                ranked.append((m, v, c, img))
+        ranked.sort(key=lambda x: -x[0])
+        top = ranked[:5]
+        if len(top) < 3 or top[0][0] < 5:
+            print(f"{st['name']}: no price data for chase cards yet")
+            continue
+        top = list(reversed(top))   # count down: #5 -> #1
+        updated = (top[-1][2].get("tcgplayer") or {}).get("updatedAt", "")
+        scenes = [{"tag": "TOP CHASE CARDS", "img_url": top[-1][3],
+                   "text": f"THE {len(top)} MOST VALUABLE CARDS IN {st['name'].upper()}",
+                   "colors": [YELLOW, WHITE]}]
+        cap = [f"🔥 Top Chase Cards: {st['name']} - the most valuable pulls right now", ""]
+        for i, (m, v, c, img) in enumerate(top):
+            rank = len(top) - i
+            rarity = (c.get("rarity") or "").upper()
+            scenes.append({"tag": f"#{rank}  {rarity}", "img_url": img, "text": c["name"].upper(),
+                           "colors": [WHITE], "sub": f"${m:,.2f} MARKET  •  #{c['number']}", "sub_size": 110})
+        for i, (m, v, c, img) in enumerate(reversed(top), 1):
+            cap.append(f"{i}. {c['name']} #{c['number']} ({c.get('rarity','')}) - ${m:,.2f}")
+        cap += ["", f"Prices: TCGplayer market price{(' updated ' + updated) if updated else ''}. Prices move daily.", "",
+                "Which one are you chasing? 👇", "",
+                "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+                "#PokemonCards #PokemonTCG #CardStax #PokemonInvesting #PokePulse #ChaseCards"]
+        return {"story_id": f"chase {st['name']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap)}
+    return None
+
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["news", "drops", "sales", "bulk"]
+TOPICS = ["news", "drops", "sales", "bulk", "chase"]
 
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
@@ -501,7 +544,8 @@ def topic_for_now():
         return "drops"     # 12:30pm ET run
     if 20 <= h <= 23:
         return "sales"     # 5:30pm ET run
-    return "bulk"          # 9:30pm ET run
+    # 9:30pm ET run: alternate Bulk Gold and Top Chase Cards day by day
+    return "bulk" if datetime.now(timezone.utc).toordinal() % 2 == 0 else "chase"
 
 def build_story():
     posted = set()
@@ -510,15 +554,15 @@ def build_story():
             posted = {l.strip().lower() for l in f if l.strip()}
     captions = recent_ig_captions()
     first = topic_for_now()
-    order = [first] + [t for t in ["news", "drops", "bulk", "sales"] if t != first]
+    order = [first] + [t for t in ["news", "drops", "bulk", "chase", "sales"] if t != first]
     articles = None
 
     for topic in order:
         print(f"--- Trying topic: {topic}")
-        if topic == "bulk":
-            story = build_bulk_story(captions)
+        if topic in ("bulk", "chase"):
+            story = build_bulk_story(captions) if topic == "bulk" else build_chase_story(captions)
             if story:
-                story["topic"] = "bulk"
+                story["topic"] = topic
                 return story
             continue
         if articles is None:

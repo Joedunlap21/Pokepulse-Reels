@@ -30,9 +30,9 @@ VOICES = ["en-US-AndrewMultilingualNeural", "en-US-BrianMultilingualNeural",
 VOICE = os.getenv("REEL_VOICE", "").strip() or "en-US-AndrewMultilingualNeural"
 if VOICE == "random":
     VOICE = random.choice(VOICES[:4])
-VOICE_RATE = os.getenv("REEL_VOICE_RATE", "").strip() or "+20%"
+VOICE_RATE = os.getenv("REEL_VOICE_RATE", "").strip() or "+23%"
 VOICE_PITCH = os.getenv("REEL_VOICE_PITCH", "").strip() or "+6Hz"   # slightly higher = more upbeat
-# auto = voice on news & sales only, music-only for drops & bulk lists. on / off force it.
+# auto = voiceover on 2 runs a day (the 9:30am + 5:30pm ET posts), whatever the topic. on / off force it.
 VOICE_MODE = os.getenv("REEL_VOICE_MODE", "").strip().lower() or "auto"
 MUSIC_VOLUME = 0.14                                      # music under the voice
 
@@ -69,6 +69,8 @@ def _shorten(s, max_words=14):
 
 def _bulk_line(i, sc):
     name = sc["text"].title()
+    m = re.match(r"#(\d+)", sc.get("tag", ""))
+    i = int(m.group(1)) if m else i
     price = re.search(r"\$[\d,]+\.?\d*", sc.get("sub", ""))
     p = price.group(0) if price else ""
     return f"Number {i}. {name}. Going for about {p}." if p else f"Number {i}. {name}."
@@ -77,12 +79,14 @@ def _bulk_line(i, sc):
 def fallback_lines(story):
     lines = []
     for i, sc in enumerate(story["scenes"]):
-        if story["story_id"].startswith("bulk") and i > 0:
+        if story["story_id"].startswith(("bulk", "chase")) and i > 0:
             lines.append(_bulk_line(i, sc))
         else:
             lines.append(_shorten(sc["text"].capitalize() if sc["text"].isupper() else sc["text"]))
     if story["story_id"].startswith("bulk"):
         lines[0] = "Check your bulk! " + _shorten(story["scenes"][0]["text"].capitalize(), 14)
+    elif story["story_id"].startswith("chase"):
+        lines[0] = _shorten(story["scenes"][0]["text"].capitalize(), 14).rstrip(".") + "!"
     return lines
 
 
@@ -153,7 +157,9 @@ def wants_voice(story):
         return True
     if VOICE_MODE in ("off", "false", "0", "never"):
         return False
-    return story.get("topic") in ("news", "sales")
+    from datetime import datetime, timezone
+    h = datetime.now(timezone.utc).hour
+    return 12 <= h <= 15 or 20 <= h <= 23     # 9:30am & 5:30pm ET runs
 
 
 # ---------------------------------------------------------------- voice
