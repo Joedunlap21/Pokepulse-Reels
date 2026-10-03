@@ -359,6 +359,85 @@ def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None):
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", out], check=True)
 
 
+
+# ---------------------------------------------------------------- live action b-roll
+
+BROLL_QUERIES = {
+    "news":  ["trading cards", "card collection", "collector cards", "opening card pack"],
+    "drops": ["opening booster pack", "unboxing cards", "card shop", "trading card box"],
+    "sales": ["graded card", "collector cards", "auction", "money counting"],
+    "bulk":  ["sorting cards", "card collection", "binder cards", "trading cards"],
+    "chase": ["opening card pack", "trading cards", "collector cards", "card collection"],
+}
+
+def get_broll(topic, out="v2_broll.mp4"):
+    """Your own clips (clips/*.mp4) first, then a free Pexels clip. Returns a path or None."""
+    own = glob.glob("clips/*.mp4") + glob.glob("clips/*.mov") + glob.glob("clips/*.MOV") + glob.glob("clips/*.MP4")
+    pexels_key = os.getenv("PEXELS_API_KEY", "").strip()
+    if own and (not pexels_key or random.random() < 0.7):
+        pick = random.choice(own)
+        print(f"B-roll: your clip {pick}")
+        return pick
+    if not pexels_key:
+        return None
+    try:
+        q = random.choice(BROLL_QUERIES.get(topic, BROLL_QUERIES["news"]))
+        r = requests.get("https://api.pexels.com/videos/search",
+                         headers={"Authorization": pexels_key},
+                         params={"query": q, "orientation": "portrait", "size": "medium", "per_page": 15},
+                         timeout=20)
+        vids = r.json().get("videos", [])
+        random.shuffle(vids)
+        for v in vids:
+            files = [f for f in v.get("video_files", [])
+                     if f.get("height") and f.get("width") and f["height"] > f["width"]
+                     and 1000 <= f["height"] <= 2200 and (f.get("file_type") or "").endswith("mp4")]
+            if not files or (v.get("duration") or 0) < 4:
+                continue
+            f = sorted(files, key=lambda x: x["height"])[-1]
+            data = requests.get(f["link"], timeout=60).content
+            with open(out, "wb") as fh:
+                fh.write(data)
+            print(f"B-roll: Pexels '{q}' video {v.get('id')} by {(v.get('user') or {}).get('name')}")
+            return out
+        print(f"B-roll: no usable Pexels clip for '{q}'")
+    except Exception as e:
+        print(f"B-roll failed ({e})")
+    return None
+
+
+def render_broll_clip(video, scene, idx, words, dur, out, screen_text=None):
+    """Full-screen live-action clip with the tag + captions on top."""
+    tag = f"v2_tag_{idx}.png"
+    render_tag(scene["tag"], tag)
+    caps = []
+    if words:
+        chunks = chunk_words(words)
+        for j, ch in enumerate(chunks):
+            p = f"v2_cap_{idx}_{j}.png"
+            render_caption([c["w"] for c in ch], p)
+            end = chunks[j + 1][0]["start"] if j + 1 < len(chunks) else dur
+            caps.append((p, max(0, ch[0]["start"] - 0.05), end))
+    elif screen_text:
+        p = f"v2_block_{idx}.png"
+        render_block(screen_text, p)
+        caps.append((p, 0.1, dur))
+    inputs = ["-stream_loop", "-1", "-i", video,
+              "-framerate", str(FPS), "-loop", "1", "-t", str(dur), "-i", tag]
+    fc = (f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},"
+          f"eq=brightness=-0.10:saturation=1.15,setsar=1[b0];"
+          f"[1]format=rgba[tg];[b0][tg]overlay=0:0[b1]")
+    last = "b1"
+    for k, (p, st, en) in enumerate(caps):
+        inputs += ["-i", p]
+        fc += f";[{last}][{k + 2}]overlay=0:0:enable='between(t,{st:.2f},{en:.2f})'[c{k}]"
+        last = f"c{k}"
+    fc += f";[{last}]format=yuv420p[v]"
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error"] + inputs +
+                   ["-filter_complex", fc, "-map", "[v]", "-an", "-t", f"{dur:.3f}", "-r", str(FPS),
+                    "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", out], check=True)
+
+
 # ---------------------------------------------------------------- build
 
 CTA_LINE = "Want the full weekly breakdown? It's free. Link in bio."
@@ -372,19 +451,29 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
     for i, x in enumerate(script):
         print(f"  {i+1}. say: {x['say']}  |  screen: {x['screen']}")
 
+    broll = None if os.getenv("REEL_BROLL", "on").lower() == "off" else get_broll(story.get("topic", "news"))
+
     clips, voices = [], []
     for i, (sc, x) in enumerate(zip(story["scenes"], script)):
         out = f"v2_scene_{i}.mp4"
+        live = broll is not None and i == 0      # hook slide = live action
         if voiced:
             vo = f"v2_vo_{i}.mp3"
             words = speak(x["say"], vo)
             dur = round(duration(vo) + 0.08, 3)
-            render_scene_clip(sc, i, words, dur, i % 2 == 0, out)
+            if live:
+                render_broll_clip(broll, sc, i, words, dur, out)
+            else:
+                render_scene_clip(sc, i, words, dur, i % 2 == 0, out)
             voices.append((vo, dur))
         else:
             n = len(x["screen"].split())
             dur = round(max(1.5, min(0.7 + n * 0.28, 2.5)), 2)
-            render_scene_clip(sc, i, None, dur, i % 2 == 0, out, screen_text=x["screen"])
+            if live:
+                dur = max(dur, 2.2)
+                render_broll_clip(broll, sc, i, None, dur, out, screen_text=x["screen"])
+            else:
+                render_scene_clip(sc, i, None, dur, i % 2 == 0, out, screen_text=x["screen"])
         clips.append((out, dur))
 
     make_cta_slide("f_cta.png")
