@@ -693,11 +693,10 @@ def compile_live_action_reel(story, output_mp4="pokepulse_reel.mp4"):
 
 # ---------------------------------------------------------------- publishing
 
-def publish_content(video_url, caption):
-    access_token = os.getenv("IG_ACCESS_TOKEN", "").strip()
-
+def publish_to_account(video_url, caption, graph, user_id, access_token, label):
+    print(f"\n===== Posting to {label} =====")
     print("Step 1: Publishing Reel to Instagram...")
-    res = requests.post(f"{GRAPH}/{IG_USER_ID}/media", data={
+    res = requests.post(f"{graph}/{user_id}/media", data={
         "media_type": "REELS",
         "video_url": video_url,
         "caption": caption,
@@ -710,7 +709,7 @@ def publish_content(video_url, caption):
         print(f"Reel Container: {cid}. Transcoding...")
         for _ in range(18):
             time.sleep(10)
-            status = requests.get(f"{GRAPH}/{cid}?fields=status_code&access_token={access_token}").json()
+            status = requests.get(f"{graph}/{cid}", params={"fields": "status_code", "access_token": access_token}).json()
             code = status.get("status_code")
             print(f"Status: {code}")
             if code == "FINISHED":
@@ -719,7 +718,7 @@ def publish_content(video_url, caption):
                 print("Encoding error on Instagram.")
                 break
 
-        pub = requests.post(f"{GRAPH}/{IG_USER_ID}/media_publish", data={
+        pub = requests.post(f"{graph}/{user_id}/media_publish", data={
             "creation_id": cid,
             "access_token": access_token
         }).json()
@@ -729,7 +728,7 @@ def publish_content(video_url, caption):
         print("Reel Error:", res)
 
     print("\nStep 2: Publishing to Story...")
-    s_res = requests.post(f"{GRAPH}/{IG_USER_ID}/media", data={
+    s_res = requests.post(f"{graph}/{user_id}/media", data={
         "media_type": "STORIES",
         "video_url": video_url,
         "access_token": access_token
@@ -739,15 +738,45 @@ def publish_content(video_url, caption):
         sid = s_res["id"]
         for _ in range(12):
             time.sleep(8)
-            s_status = requests.get(f"{GRAPH}/{sid}?fields=status_code&access_token={access_token}").json()
+            s_status = requests.get(f"{graph}/{sid}", params={"fields": "status_code", "access_token": access_token}).json()
             if s_status.get("status_code") == "FINISHED":
                 break
-        s_pub = requests.post(f"{GRAPH}/{IG_USER_ID}/media_publish", data={
+        s_pub = requests.post(f"{graph}/{user_id}/media_publish", data={
             "creation_id": sid,
             "access_token": access_token
         }).json()
         print(f"Story Publish Result: {s_pub}")
+    else:
+        print("Story Error:", s_res)
     return published
+
+def second_account():
+    """@pokepulse.io - same Facebook-login setup as card.stax (never-expiring Page token)."""
+    token = os.getenv("IG_TOKEN_2", "").strip()
+    user_id = os.getenv("IG_USER_ID_2", "").strip()
+    if not token or not user_id:
+        print("IG_TOKEN_2 / IG_USER_ID_2 not set - only posting to the main account.")
+        return None
+    return (GRAPH, user_id, token, "second account (@pokepulse.io)")
+
+def publish_content(video_url, caption):
+    accounts = []
+    token1 = os.getenv("IG_ACCESS_TOKEN", "").strip()
+    if token1:
+        accounts.append((GRAPH, IG_USER_ID, token1, "main account (IG_ACCESS_TOKEN)"))
+    acct2 = second_account()
+    if acct2:
+        accounts.append(acct2)
+
+    any_ok = False
+    for graph, uid, tok, label in accounts:
+        try:
+            ok = publish_to_account(video_url, caption, graph, uid, tok, label)
+        except Exception as e:
+            print(f"{label} failed: {e}")
+            ok = False
+        any_ok = any_ok or ok
+    return any_ok
 
 if __name__ == "__main__":
     story = build_story()
