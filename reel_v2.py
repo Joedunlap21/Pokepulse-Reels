@@ -23,8 +23,16 @@ from PIL import Image, ImageDraw, ImageFilter
 
 from main import W, H, BG, YELLOW, WHITE, GREEN, RED, get_font, text_w, load_image
 
-VOICE = os.getenv("REEL_VOICE", "en-US-AndrewNeural")   # try en-US-GuyNeural / en-US-ChristopherNeural
-VOICE_RATE = os.getenv("REEL_VOICE_RATE", "+12%")       # a bit faster = more energy
+# The "Multilingual" voices are Microsoft's newest, most human-sounding ones.
+VOICES = ["en-US-AndrewMultilingualNeural", "en-US-BrianMultilingualNeural",
+          "en-US-AvaMultilingualNeural", "en-US-EmmaMultilingualNeural",
+          "en-US-ChristopherNeural", "en-US-SteffanNeural", "en-GB-RyanNeural", "en-AU-WilliamNeural"]
+VOICE = os.getenv("REEL_VOICE", "").strip() or "en-US-AndrewMultilingualNeural"
+if VOICE == "random":
+    VOICE = random.choice(VOICES[:4])
+VOICE_RATE = os.getenv("REEL_VOICE_RATE", "").strip() or "+15%"
+# auto = voice on news & sales only, music-only for drops & bulk lists. on / off force it.
+VOICE_MODE = os.getenv("REEL_VOICE_MODE", "").strip().lower() or "auto"
 MUSIC_VOLUME = 0.14                                      # music under the voice
 
 # Instagram covers the top ~220px and bottom ~420px (username, caption, buttons) and the right edge.
@@ -37,8 +45,11 @@ FPS = 30
 
 # ---------------------------------------------------------------- script
 
+STOP_END = {"is", "are", "the", "a", "an", "to", "of", "with", "and", "for", "on", "in", "at", "will", "be", "its", "this", "that", "from", "as", "by", "set"}
+
 def _shorten(s, max_words=14):
     s = re.sub(r"^(according to (a report from )?[\w\s\.\-']+?,\s*)", "", s, flags=re.I)
+    s = re.sub(r"\breportedly\s+", "", s, flags=re.I)
     s = re.sub(r"\s*\([^)]*\)", "", s)
     s = s.strip().rstrip(".")
     words = s.split()
@@ -48,6 +59,10 @@ def _shorten(s, max_words=14):
         m = re.match(r"(.{25,}?)[,;:]\s", cut + " ")
         s = m.group(1) if m else cut
     s = s.strip(" ,;:-")
+    ws = s.split()
+    while len(ws) > 3 and ws[-1].lower().strip(".,") in STOP_END:
+        ws.pop()
+    s = " ".join(ws)
     return (s[:1].upper() + s[1:] + ".") if s else s
 
 
@@ -70,44 +85,71 @@ def fallback_lines(story):
     return lines
 
 
-def ai_lines(story):
-    """Optional free rewrite with Google Gemini (free API key from aistudio.google.com).
-    Returns None if no key or anything goes wrong -> simple trimming is used instead."""
+def ai_script(story):
+    """Optional free rewrite with Google Gemini (free key from aistudio.google.com).
+    Returns [{"say":..., "screen":...}, ...] or None -> simple trimming is used instead."""
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         return None
     facts = [sc["text"] + (f" ({sc['sub']})" if sc.get("sub") else "") for sc in story["scenes"]]
     prompt = (
-        "You write voiceover for a fast Pokemon TCG news Instagram Reel.\n"
-        f"Rewrite each of these {len(facts)} slides into ONE short spoken line.\n"
-        "Rules: max 14 words per line, punchy and hype but factual, no hashtags, no emojis, "
-        "never invent facts, prices or dates that aren't given. "
-        "Line 1 is the hook - make people stop scrolling.\n"
-        'Reply with JSON only: {"lines": ["...", "..."]}\n\n'
-        + "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
+        "You are the voice of PokePulse, a Pokemon card collector page on Instagram. "
+        "Write the script for a short Reel like a real collector talking to friends - casual, confident, "
+        "excited when it's earned. Use contractions. Plain everyday words. No news-anchor phrases "
+        "('reportedly', 'according to', 'it has been announced'), no corporate words, no hashtags, no emojis.\n"
+        "NEVER invent facts, prices, dates or card names that aren't in the source.\n\n"
+        f"Write exactly {len(facts)} slides, one per slide below, in the same order and about the same thing.\n"
+        "For each slide give:\n"
+        '  "say": what the voice says, 6-14 words, sounds natural out loud\n'
+        '  "screen": the big on-screen text, 2-6 words, ALL CAPS, the key fact\n'
+        "Slide 1 is the hook - make a collector stop scrolling (a surprise, a number, a question).\n"
+        "The last slide should land the point (why it matters / what to do).\n"
+        'Reply with JSON only: {"slides": [{"say": "...", "screen": "..."}]}\n\n'
+        f"FULL ARTICLE CONTEXT:\n{story.get('context', '')[:3000]}\n\n"
+        "SLIDES:\n" + "\n".join(f"{i+1}. {f}" for i, f in enumerate(facts))
     )
-    model = os.getenv("REEL_AI_MODEL", "gemini-2.5-flash")
+    model = os.getenv("REEL_AI_MODEL", "").strip() or "gemini-2.5-flash"
     try:
         r = requests.post(
             f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
             params={"key": key},
             json={"contents": [{"parts": [{"text": prompt}]}],
-                  "generationConfig": {"temperature": 0.6, "responseMimeType": "application/json"}},
-            timeout=45)
+                  "generationConfig": {"temperature": 0.8, "responseMimeType": "application/json"}},
+            timeout=60)
         if r.status_code != 200:
             print(f"AI script: Gemini HTTP {r.status_code} {r.text[:200]!r}")
             return None
         content = r.json()["candidates"][0]["content"]["parts"][0]["text"]
         m = re.search(r"\{.*\}", content, re.S)
-        lines = [re.sub(r"\s+", " ", str(l)).strip() for l in json.loads(m.group(0))["lines"]]
-        if len(lines) != len(facts) or any(not l or len(l.split()) > 22 for l in lines):
-            print(f"AI script rejected (got {len(lines)} lines)")
+        slides = json.loads(m.group(0))["slides"]
+        out = [{"say": re.sub(r"\s+", " ", str(x.get("say", ""))).strip(),
+                "screen": re.sub(r"\s+", " ", str(x.get("screen", ""))).strip().upper()} for x in slides]
+        if len(out) != len(facts) or any(not x["say"] or not x["screen"] or len(x["say"].split()) > 22
+                                         or len(x["screen"].split()) > 9 for x in out):
+            print(f"AI script rejected ({len(out)} slides)")
             return None
         print(f"AI script: {model}")
-        return lines
+        return out
     except Exception as e:
         print(f"AI script failed ({e}) - using simple trimming")
         return None
+
+
+def build_script(story):
+    script = ai_script(story)
+    if script:
+        return script
+    says = fallback_lines(story)
+    return [{"say": say, "screen": _shorten(sc["text"], 7).rstrip(".").upper()}
+            for say, sc in zip(says, story["scenes"])]
+
+
+def wants_voice(story):
+    if VOICE_MODE in ("on", "true", "1", "always"):
+        return True
+    if VOICE_MODE in ("off", "false", "0", "never"):
+        return False
+    return story.get("topic") in ("news", "sales")
 
 
 # ---------------------------------------------------------------- voice
@@ -225,6 +267,36 @@ def render_caption(words, path):
     img.save(path)
 
 
+def render_block(text, path):
+    """Music-only mode: the slide's short on-screen line, big, up to 3 lines."""
+    img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    words = text.upper().split()
+    for size in range(150, 76, -6):
+        f, stroke = get_font(size), max(6, size // 14)
+        lines, cur = [], []
+        for w in words:
+            if cur and text_w(d, " ".join(cur + [w]), f, stroke) > CAP_MAX_W:
+                lines.append(cur)
+                cur = []
+            cur.append(w)
+        if cur:
+            lines.append(cur)
+        if len(lines) <= 3:
+            break
+    line_h = int(size * 1.0)
+    y = CAP_CENTER_Y - (len(lines) * line_h) // 2 + 40
+    space = text_w(d, " ", f)
+    for ln in lines:
+        x = (W - text_w(d, " ".join(ln), f, stroke)) // 2
+        for w in ln:
+            d.text((x, y), w, font=f, fill=YELLOW if _is_key(w) else WHITE,
+                   stroke_width=stroke, stroke_fill="#000000")
+            x += text_w(d, w, f, stroke) + space
+        y += line_h
+    img.save(path)
+
+
 def chunk_words(words, max_words=3, max_chars=14):
     chunks, cur = [], []
     for w in words:
@@ -241,18 +313,23 @@ def chunk_words(words, max_words=3, max_chars=14):
     return chunks
 
 
-def render_scene_clip(scene, idx, words, dur, zoom_in, out):
+def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None):
     bg, tag = f"v2_bg_{idx}.png", f"v2_tag_{idx}.png"
     render_background(scene, bg)
     render_tag(scene["tag"], tag)
-    chunks = chunk_words(words)
     caps = []
-    for j, ch in enumerate(chunks):
-        p = f"v2_cap_{idx}_{j}.png"
-        render_caption([c["w"] for c in ch], p)
-        start = ch[0]["start"]
-        end = chunks[j + 1][0]["start"] if j + 1 < len(chunks) else dur
-        caps.append((p, max(0, start - 0.05), end))
+    if words:
+        chunks = chunk_words(words)
+        for j, ch in enumerate(chunks):
+            p = f"v2_cap_{idx}_{j}.png"
+            render_caption([c["w"] for c in ch], p)
+            start = ch[0]["start"]
+            end = chunks[j + 1][0]["start"] if j + 1 < len(chunks) else dur
+            caps.append((p, max(0, start - 0.05), end))
+    elif screen_text:
+        p = f"v2_block_{idx}.png"
+        render_block(screen_text, p)
+        caps.append((p, 0.1, dur))
 
     frames = int(dur * FPS)
     z = f"1+0.06*on/{frames}" if zoom_in else f"1.06-0.06*on/{frames}"
@@ -274,58 +351,77 @@ def render_scene_clip(scene, idx, words, dur, zoom_in, out):
 
 # ---------------------------------------------------------------- build
 
-CTA_LINE = "Get the free weekly PokePulse report. Link in bio."
+CTA_LINE = "Want the full weekly breakdown? It's free. Link in bio."
 
 def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
     from main import make_cta_slide, render_motion_clip
 
-    lines = ai_lines(story) or fallback_lines(story)
-    for i, l in enumerate(lines):
-        print(f"  VO {i+1}: {l}")
+    script = build_script(story)
+    voiced = wants_voice(story)
+    print(f"Mode: {'VOICEOVER (' + VOICE + ')' if voiced else 'MUSIC ONLY'}  [topic={story.get('topic')}]")
+    for i, x in enumerate(script):
+        print(f"  {i+1}. say: {x['say']}  |  screen: {x['screen']}")
 
     clips, voices = [], []
-    for i, (sc, line) in enumerate(zip(story["scenes"], lines)):
-        vo = f"v2_vo_{i}.mp3"
-        words = speak(line, vo)
-        dur = round(duration(vo) + 0.25, 3)
+    for i, (sc, x) in enumerate(zip(story["scenes"], script)):
         out = f"v2_scene_{i}.mp4"
-        render_scene_clip(sc, i, words, dur, i % 2 == 0, out)
+        if voiced:
+            vo = f"v2_vo_{i}.mp3"
+            words = speak(x["say"], vo)
+            dur = round(duration(vo) + 0.08, 3)
+            render_scene_clip(sc, i, words, dur, i % 2 == 0, out)
+            voices.append((vo, dur))
+        else:
+            n = len(x["screen"].split())
+            dur = round(max(1.5, min(0.7 + n * 0.28, 2.5)), 2)
+            render_scene_clip(sc, i, None, dur, i % 2 == 0, out, screen_text=x["screen"])
         clips.append((out, dur))
-        voices.append((vo, dur))
 
-    # CTA
-    cta_vo = "v2_vo_cta.mp3"
-    speak(CTA_LINE, cta_vo)
-    cta_dur = round(max(2.2, duration(cta_vo) + 0.4), 3)
     make_cta_slide("f_cta.png")
+    if voiced:
+        cta_vo = "v2_vo_cta.mp3"
+        speak(CTA_LINE, cta_vo)
+        cta_dur = round(max(1.8, duration(cta_vo) + 0.2), 3)
+        voices.append((cta_vo, cta_dur))
+    else:
+        cta_dur = 1.8
     render_motion_clip("f_cta.png", None, cta_dur, "v2_scene_cta.mp4")
     clips.append(("v2_scene_cta.mp4", cta_dur))
-    voices.append((cta_vo, cta_dur))
     total = sum(d for _, d in clips)
 
     with open("v2_playlist.txt", "w") as f:
         for c, _ in clips:
             f.write(f"file '{c}'\n")
 
-    # voice track: each line padded to its scene length so it stays in sync
-    vo_inputs, vo_fc = [], ""
-    for k, (v, d) in enumerate(voices):
-        vo_inputs += ["-i", v]
-        vo_fc += f"[{k}]apad=whole_dur={d}[a{k}];"
-    vo_fc += "".join(f"[a{k}]" for k in range(len(voices))) + f"concat=n={len(voices)}:v=0:a=1[vo]"
-    subprocess.run(["ffmpeg", "-y", "-loglevel", "error"] + vo_inputs +
-                   ["-filter_complex", vo_fc, "-map", "[vo]", "-ar", "44100", "v2_voice.wav"], check=True)
-
     music = glob.glob("audio/*.mp3") + glob.glob("audio/*.wav")
-    mix_in = ["-i", "v2_voice.wav"]
-    if music:
-        track = random.choice(music)
+    track = random.choice(music) if music else None
+    if track:
         print(f"Music: {track}")
-        mix_in += ["-stream_loop", "-1", "-i", track]
-        afc = (f"[2:a]volume={MUSIC_VOLUME},afade=t=out:st={max(0.5, total - 1.2):.2f}:d=1.2[m];"
-               f"[1:a][m]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]")
+    fade = f"afade=t=out:st={max(0.5, total - 1.2):.2f}:d=1.2"
+
+    if voiced:
+        # voice track: each line padded to its scene length so it stays in sync
+        vo_inputs, vo_fc = [], ""
+        for k, (v, d) in enumerate(voices):
+            vo_inputs += ["-i", v]
+            vo_fc += f"[{k}]apad=whole_dur={d}[a{k}];"
+        vo_fc += "".join(f"[a{k}]" for k in range(len(voices))) + f"concat=n={len(voices)}:v=0:a=1[vo]"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error"] + vo_inputs +
+                       ["-filter_complex", vo_fc, "-map", "[vo]", "-ar", "44100", "v2_voice.wav"], check=True)
+        mix_in = ["-i", "v2_voice.wav"]
+        if track:
+            mix_in += ["-stream_loop", "-1", "-i", track]
+            afc = (f"[2:a]volume={MUSIC_VOLUME},{fade}[m];"
+                   f"[1:a][m]amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]")
+        else:
+            afc = "[1:a]anull[aout]"
     else:
-        afc = "[1:a]anull[aout]"
+        if track:
+            mix_in = ["-stream_loop", "-1", "-i", track]
+            afc = f"[1:a]volume=0.9,{fade}[aout]"
+        else:
+            mix_in = ["-f", "lavfi", "-i", "anullsrc=r=44100:cl=stereo"]
+            afc = "[1:a]anull[aout]"
 
     subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", "v2_playlist.txt"]
                    + mix_in +
@@ -333,3 +429,24 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
                     "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-r", str(FPS),
                     "-c:a", "aac", "-b:a", "192k", "-t", f"{total:.3f}", output_mp4], check=True)
     return output_mp4
+
+
+# ---------------------------------------------------------------- voice samples
+
+SAMPLE_LINE = ("Okay, this one's wild. Pokemon just dropped a brand new box, and collectors are going crazy. "
+               "Here's what's inside.")
+
+def make_voice_samples(folder="voice_samples"):
+    os.makedirs(folder, exist_ok=True)
+    global VOICE
+    for v in VOICES:
+        VOICE = v
+        try:
+            speak(SAMPLE_LINE, os.path.join(folder, f"{v}.mp3"))
+            print(f"made sample: {v}")
+        except Exception as e:
+            print(f"{v} failed: {e}")
+
+
+if __name__ == "__main__":
+    make_voice_samples()

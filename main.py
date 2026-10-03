@@ -518,6 +518,7 @@ def build_story():
         if topic == "bulk":
             story = build_bulk_story(captions)
             if story:
+                story["topic"] = "bulk"
                 return story
             continue
         if articles is None:
@@ -539,6 +540,8 @@ def build_story():
                 story = build_article_story(art, "news")
             if story:
                 print(f"Picked [{topic}] {art['source']}: {art['title']}")
+                story["topic"] = topic
+                story["context"] = art["title"] + ". " + " ".join(all_sentences(art)[:12])
                 return story
     return None
 
