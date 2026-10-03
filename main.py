@@ -447,6 +447,24 @@ def best_market(card):
             best, variant = m, v
     return best, variant
 
+def price_info(card, variant, market):
+    """Numbers for the price box next to the card: TCGplayer low / market / high
+    + 30-day trend (Cardmarket 1-day avg vs 30-day avg, shown only as a %)."""
+    p = ((card.get("tcgplayer") or {}).get("prices") or {}).get(variant) or {}
+    cm = (card.get("cardmarket") or {}).get("prices") or {}
+    trend = None
+    a1, a30 = cm.get("avg1") or cm.get("avg7"), cm.get("avg30")
+    if a1 and a30:
+        trend = (a1 / a30 - 1) * 100
+    return {"market": market, "low": p.get("low"), "high": p.get("high"), "trend": trend}
+
+def say_dollars(m):
+    """$12.34 -> '12 dollars and 34 cents' so the voiceover says dollars."""
+    d, c = int(m), int(round((m - int(m)) * 100))
+    if c == 100:
+        d, c = d + 1, 0
+    return f"{d:,} dollars" + (f" and {c} cents" if c else "")
+
 VARIANT_NAMES = {"normal": "", "holofoil": "HOLO", "reverseHolofoil": "REVERSE HOLO",
                  "1stEditionNormal": "1ST EDITION", "1stEditionHolofoil": "1ST EDITION HOLO"}
 
@@ -460,7 +478,7 @@ def build_bulk_story(captions):
             continue
         cards = tcg_get("cards", {"q": f'set.id:{st["id"]} (rarity:Common OR rarity:Uncommon)',
                                   "pageSize": 250,
-                                  "select": "id,name,number,rarity,images,set,tcgplayer"}).get("data", [])
+                                  "select": "id,name,number,rarity,images,set,tcgplayer,cardmarket"}).get("data", [])
         ranked = []
         for c in cards:
             m, v = best_market(c)
@@ -468,7 +486,7 @@ def build_bulk_story(captions):
             if m > 0 and img:
                 ranked.append((m, v, c, img))
         ranked.sort(key=lambda x: -x[0])
-        top = ranked[:4]
+        top = ranked[:3]   # 3 cards keeps the reel short
         if len(top) < 3 or top[0][0] < 1.0:
             print(f"{st['name']}: no commons/uncommons worth $1+ yet")
             continue
@@ -483,7 +501,9 @@ def build_bulk_story(captions):
             rarity = (c.get("rarity") or "").upper()
             tag = f"#{rank}  {rarity}" + (f"  {vname}" if vname else "")
             scenes.append({"tag": tag, "img_url": img, "text": c["name"].upper(),
-                           "colors": [WHITE], "sub": f"${m:,.2f} MARKET  •  #{c['number']}", "sub_size": 110})
+                           "colors": [WHITE], "sub": f"${m:,.2f} MARKET  •  #{c['number']}", "sub_size": 110,
+                           "prices": price_info(c, v, m),
+                           "say": f"Number {rank}. {c['name']}. {say_dollars(m)}."})
             cap.append(f"{rank}. {c['name']} #{c['number']} ({c.get('rarity','')}{', ' + vname.title() if vname else ''}) - ${m:,.2f}")
         cap += ["", f"Prices: TCGplayer market price{(' updated ' + updated) if updated else ''}. Prices move daily.", "",
                 "Check your bulk and tell us what you found 👇", "",
@@ -503,7 +523,7 @@ def build_chase_story(captions):
             print(f"Chase cards already done for {st['name']}")
             continue
         cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
-                                  "select": "id,name,number,rarity,images,set,tcgplayer"}).get("data", [])
+                                  "select": "id,name,number,rarity,images,set,tcgplayer,cardmarket"}).get("data", [])
         ranked = []
         for c in cards:
             m, v = best_market(c)
@@ -511,7 +531,7 @@ def build_chase_story(captions):
             if m > 0 and img:
                 ranked.append((m, v, c, img))
         ranked.sort(key=lambda x: -x[0])
-        top = ranked[:5]
+        top = ranked[:3]   # top 3 keeps the reel short
         if len(top) < 3 or top[0][0] < 5:
             print(f"{st['name']}: no price data for chase cards yet")
             continue
@@ -525,7 +545,9 @@ def build_chase_story(captions):
             rank = len(top) - i
             rarity = (c.get("rarity") or "").upper()
             scenes.append({"tag": f"#{rank}  {rarity}", "img_url": img, "text": c["name"].upper(),
-                           "colors": [WHITE], "sub": f"${m:,.2f} MARKET  •  #{c['number']}", "sub_size": 110})
+                           "colors": [WHITE], "sub": f"${m:,.2f} MARKET  •  #{c['number']}", "sub_size": 110,
+                           "prices": price_info(c, v, m),
+                           "say": f"Number {rank}. {c['name']}. {say_dollars(m)}."})
         for i, (m, v, c, img) in enumerate(reversed(top), 1):
             cap.append(f"{i}. {c['name']} #{c['number']} ({c.get('rarity','')}) - ${m:,.2f}")
         cap += ["", f"Prices: TCGplayer market price{(' updated ' + updated) if updated else ''}. Prices move daily.", "",
@@ -705,8 +727,13 @@ def render_scene_layers(scene, bg_path, txt_path):
         bg.paste(cover, (0, 0))
 
         art = raw.copy()
-        art.thumbnail((1000, IMG_BOTTOM - 70), Image.Resampling.LANCZOS)
-        bg.paste(art, ((W - art.width) // 2, 40 + (IMG_BOTTOM - 70 - art.height) // 2))
+        if scene.get("prices"):
+            # card on the left, price box on the right
+            art.thumbnail((600, IMG_BOTTOM - 120), Image.Resampling.LANCZOS)
+            bg.paste(art, (40 + (600 - art.width) // 2, 60 + (IMG_BOTTOM - 120 - art.height) // 2))
+        else:
+            art.thumbnail((1000, IMG_BOTTOM - 70), Image.Resampling.LANCZOS)
+            bg.paste(art, ((W - art.width) // 2, 40 + (IMG_BOTTOM - 70 - art.height) // 2))
 
     # real fade from the art into the dark text area (alpha composite, not solid lines)
     fade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -716,6 +743,8 @@ def render_scene_layers(scene, bg_path, txt_path):
         a = 255 if y >= IMG_BOTTOM else int(255 * ((y - f_start) / 300) ** 1.4)
         fd.line([(0, y), (W, y)], fill=BG + (a,))
     bg = Image.alpha_composite(bg.convert("RGBA"), fade).convert("RGB")
+    if scene.get("prices"):
+        bg = draw_price_box(bg, scene["prices"])
     bg.save(bg_path)
 
     # text layer
@@ -743,6 +772,52 @@ def render_scene_layers(scene, bg_path, txt_path):
         d.text(((W - text_w(d, sub, sf, 5)) // 2, y + 14), sub, font=sf, fill=GREEN,
                stroke_fill="#000000", stroke_width=5)
     txt.save(txt_path)
+
+def draw_price_box(img, pr):
+    """Price panel beside the card: MARKET (big), LOW, HIGH and the 30-day trend arrow."""
+    x0, y0, x1, y1 = 670, 170, W - 40, 990
+    layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(layer)
+    d.rounded_rectangle([x0, y0, x1, y1], radius=26, fill=(8, 8, 12, 215), outline=(255, 255, 255, 60), width=3)
+    cx = (x0 + x1) // 2
+    def center(text, y, size, color):
+        f = get_font(size)
+        while text_w(d, text, f) > (x1 - x0) - 40 and size > 30:
+            size -= 4
+            f = get_font(size)
+        d.text((cx - text_w(d, text, f) // 2, y), text, font=f, fill=color)
+    def rule(y):
+        d.line([(x0 + 30, y), (x1 - 30, y)], fill=(255, 255, 255, 70), width=2)
+    money = lambda v: f"${v:,.2f}" if v else "—"
+    center("MARKET PRICE", y0 + 30, 46, (255, 255, 255, 200))
+    center(money(pr["market"]), y0 + 82, 104, GREEN)
+    rule(y0 + 210)
+    center("LOW", y0 + 232, 40, (255, 255, 255, 170))
+    center(money(pr.get("low")) if pr.get("low") else "N/A", y0 + 272, 70, WHITE)
+    rule(y0 + 370)
+    center("HIGH", y0 + 392, 40, (255, 255, 255, 170))
+    center(money(pr.get("high")) if pr.get("high") else "N/A", y0 + 432, 70, WHITE)
+    rule(y0 + 530)
+    center("30-DAY TREND", y0 + 552, 40, (255, 255, 255, 170))
+    t = pr.get("trend")
+    if t is None:
+        center("N/A", y0 + 600, 70, WHITE)
+    else:
+        up = t >= 0
+        col = GREEN if up else RED
+        label = f"{abs(t):.1f}%"
+        f = get_font(80)
+        tw = text_w(d, label, f)
+        tx = cx - (tw + 60) // 2 + 60
+        ty = y0 + 598
+        ax = tx - 50
+        if up:   # triangle arrow (drawn, since the font has no arrow glyph)
+            d.polygon([(ax, ty + 62), (ax + 40, ty + 62), (ax + 20, ty + 22)], fill=col)
+        else:
+            d.polygon([(ax, ty + 24), (ax + 40, ty + 24), (ax + 20, ty + 64)], fill=col)
+        d.text((tx, ty), label, font=f, fill=col)
+    center("TCGPLAYER • TREND: CARDMARKET", y1 - 70, 30, (255, 255, 255, 120))
+    return Image.alpha_composite(img.convert("RGBA"), layer).convert("RGB")
 
 def make_cta_slide(out_path="f_cta.png"):
     cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
