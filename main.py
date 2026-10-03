@@ -785,7 +785,17 @@ if __name__ == "__main__":
         sys.exit(0)
 
     print(f"Producing Reel: {story['story_id']}")
-    mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
+    try:
+        from reel_v2 import compile_voiced_reel
+        mp4_file = compile_voiced_reel(story, "pokepulse_reel.mp4")
+        print("Built voiced reel (v2)")
+    except Exception as e:
+        print(f"Voiced reel failed ({e}) - falling back to classic slideshow")
+        mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
+
+    if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes"):
+        print("DRY RUN - video saved as pokepulse_reel.mp4, nothing posted.")
+        sys.exit(0)
 
     print("Uploading to Cloudinary CDN...")
     upload_res = cloudinary.uploader.upload_large(mp4_file, resource_type="video", folder="pokepulse_reels")
