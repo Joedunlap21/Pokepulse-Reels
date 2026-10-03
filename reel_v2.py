@@ -102,7 +102,9 @@ def ai_script(story):
         "For each slide give:\n"
         '  "say": what the voice says, 6-14 words, sounds natural out loud\n'
         '  "screen": the big on-screen text, 2-6 words, ALL CAPS, the key fact\n'
-        "Slide 1 is the hook - make a collector stop scrolling (a surprise, a number, a question).\n"
+        "Slide 1 is the hook - make a collector stop scrolling (a surprise, a number, a question). "
+        "Start straight with the news itself. Never open with filler like 'Okay', 'So', 'Guys', 'Yo', "
+        "'This one's wild', 'You won't believe', 'Listen up'.\n"
         "The last slide should land the point (why it matters / what to do).\n"
         'Reply with JSON only: {"slides": [{"say": "...", "screen": "..."}]}\n\n'
         f"FULL ARTICLE CONTEXT:\n{story.get('context', '')[:3000]}\n\n"
@@ -433,8 +435,7 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
 
 # ---------------------------------------------------------------- voice samples
 
-SAMPLE_LINE = ("Okay, this one's wild. Pokemon just dropped a brand new box, and collectors are going crazy. "
-               "Here's what's inside.")
+SAMPLE_LINE = "Pokemon just dropped a new box. Here's what's inside, and what it'll cost you."
 
 def make_voice_samples(folder="voice_samples"):
     os.makedirs(folder, exist_ok=True)
