@@ -359,9 +359,37 @@ def chunk_words(words, max_words=3, max_chars=14):
     return chunks
 
 
-def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None):
-    bg, tag = f"v2_bg_{idx}.png", f"v2_tag_{idx}.png"
-    render_background(scene, bg)
+CUT_EVERY = 1.3   # seconds between picture changes inside a slide
+
+def make_bg_video(scene, idx, dur, zoom_in, extra_imgs, out):
+    """Background for one slide: switches picture every ~1.3s with a slow zoom on each."""
+    imgs = [scene["img_url"]] + [u for u in (extra_imgs or []) if u != scene["img_url"]]
+    n = max(1, min(len(imgs), int(dur // CUT_EVERY)))
+    parts, seg = [], dur / n
+    for k in range(n):
+        png = f"v2_bg_{idx}_{k}.png"
+        render_background(dict(scene, img_url=imgs[k]), png)
+        frames = int(seg * FPS) + 1
+        zi = (zoom_in + k) % 2 == 0
+        z = f"1+0.08*on/{frames}" if zi else f"1.08-0.08*on/{frames}"
+        part = f"v2_bgpart_{idx}_{k}.mp4"
+        subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-loop", "1",
+                        "-t", f"{seg:.3f}", "-i", png, "-vf",
+                        f"scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps={FPS}",
+                        "-t", f"{seg:.3f}", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                        "-pix_fmt", "yuv420p", part], check=True)
+        parts.append(part)
+    with open(f"v2_bglist_{idx}.txt", "w") as f:
+        for p_ in parts:
+            f.write(f"file '{p_}'\n")
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0", "-i", f"v2_bglist_{idx}.txt",
+                    "-c", "copy", out], check=True)
+    return out
+
+
+def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None, extra_imgs=None):
+    tag = f"v2_tag_{idx}.png"
+    bgvid = make_bg_video(scene, idx, dur, 0 if zoom_in else 1, extra_imgs, f"v2_bgvid_{idx}.mp4")
     render_tag(scene["tag"], tag)
     caps = []
     if words:
@@ -377,12 +405,8 @@ def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None):
         render_block(screen_text, p)
         caps.append((p, 0.1, dur))
 
-    frames = int(dur * FPS)
-    z = f"1+0.06*on/{frames}" if zoom_in else f"1.06-0.06*on/{frames}"
-    inputs = ["-framerate", str(FPS), "-loop", "1", "-t", str(dur), "-i", bg,
-              "-framerate", str(FPS), "-loop", "1", "-t", str(dur), "-i", tag]
-    fc = (f"[0]scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-          f":d=1:s={W}x{H}:fps={FPS}[b0];"
+    inputs = ["-i", bgvid, "-framerate", str(FPS), "-loop", "1", "-t", str(dur), "-i", tag]
+    fc = (f"[0:v]fps={FPS},setsar=1[b0];"
           f"[1]format=rgba,fade=t=in:st=0:d=0.15:alpha=1[tg];[b0][tg]overlay=0:0[b1]")
     last = "b1"
     for k, (p, s, e) in enumerate(caps):
@@ -599,9 +623,18 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
 
     broll = None if os.getenv("REEL_BROLL", "off").lower() != "on" else get_broll(story.get("topic", "news"))
 
+    pool = story.get("image_pool") or []
+    used = set(sc["img_url"] for sc in story["scenes"])
+    spare = [u for u in pool if u not in used] or pool
+    rot = 0
     clips, voices = [], []
     for i, (sc, x) in enumerate(zip(story["scenes"], script)):
         out = f"v2_scene_{i}.mp4"
+        # article reels: rotate through the image pool so the picture keeps changing
+        extra = None
+        if len(pool) > 1:
+            extra = [spare[(rot + k) % len(spare)] for k in range(3)]
+            rot += 2
         live = broll is not None and i == 0      # hook slide = live action
         if voiced:
             vo = f"v2_vo_{i}.mp3"
@@ -610,7 +643,7 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
             if live:
                 render_broll_clip(broll, sc, i, words, dur, out)
             else:
-                render_scene_clip(sc, i, words, dur, i % 2 == 0, out)
+                render_scene_clip(sc, i, words, dur, i % 2 == 0, out, extra_imgs=extra)
             voices.append((vo, dur))
         else:
             n = len(x["screen"].split())
@@ -619,7 +652,7 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
                 dur = max(dur, 2.2)
                 render_broll_clip(broll, sc, i, None, dur, out, screen_text=x["screen"])
             else:
-                render_scene_clip(sc, i, None, dur, i % 2 == 0, out, screen_text=x["screen"])
+                render_scene_clip(sc, i, None, dur, i % 2 == 0, out, screen_text=x["screen"], extra_imgs=extra)
         clips.append((out, dur))
 
     make_cta_slide("f_cta.png")

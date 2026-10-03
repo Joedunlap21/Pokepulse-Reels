@@ -599,8 +599,9 @@ def vary_images(story, art):
     scenes = story["scenes"]
     own = list(dict.fromkeys(art["images"]))
     need = len(scenes) - len(own)
-    extras = extra_images(art, need + 2) if need > 0 else []
+    extras = extra_images(art, max(need, 0) + 6)
     pool = own + [u for u in extras if u not in own]
+    story["image_pool"] = pool
     if len(pool) < 2:
         return
     for i, sc in enumerate(scenes):
