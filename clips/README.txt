@@ -1,0 +1,1 @@
+Drop your own short vertical video clips here (.mp4 or .mov, under 25 MB each). The bot uses them as the live-action opener of the Reel. Good ideas: opening packs, flipping through a binder, slabs, a card wall, behind the counter.
