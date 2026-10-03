@@ -20,7 +20,6 @@ on:
 
 permissions:
   contents: read
-  models: read   # free GitHub AI models for writing the voiceover script
 
 jobs:
   render_and_post_reel:
@@ -50,7 +49,7 @@ jobs:
           IG_USER_ID_2: ${{ secrets.IG_USER_ID_2 }}
           IG_TOKEN_2: ${{ secrets.IG_TOKEN_2 }}
           POKEMONTCG_API_KEY: ${{ secrets.POKEMONTCG_API_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           REEL_TOPIC: ${{ github.event.inputs.topic }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: python main.py
