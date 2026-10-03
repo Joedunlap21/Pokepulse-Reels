@@ -509,7 +509,7 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
     for i, x in enumerate(script):
         print(f"  {i+1}. say: {x['say']}  |  screen: {x['screen']}")
 
-    broll = None if os.getenv("REEL_BROLL", "on").lower() == "off" else get_broll(story.get("topic", "news"))
+    broll = None if os.getenv("REEL_BROLL", "off").lower() != "on" else get_broll(story.get("topic", "news"))
 
     clips, voices = [], []
     for i, (sc, x) in enumerate(zip(story["scenes"], script)):
