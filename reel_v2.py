@@ -30,7 +30,8 @@ VOICES = ["en-US-AndrewMultilingualNeural", "en-US-BrianMultilingualNeural",
 VOICE = os.getenv("REEL_VOICE", "").strip() or "en-US-AndrewMultilingualNeural"
 if VOICE == "random":
     VOICE = random.choice(VOICES[:4])
-VOICE_RATE = os.getenv("REEL_VOICE_RATE", "").strip() or "+15%"
+VOICE_RATE = os.getenv("REEL_VOICE_RATE", "").strip() or "+20%"
+VOICE_PITCH = os.getenv("REEL_VOICE_PITCH", "").strip() or "+6Hz"   # slightly higher = more upbeat
 # auto = voice on news & sales only, music-only for drops & bulk lists. on / off force it.
 VOICE_MODE = os.getenv("REEL_VOICE_MODE", "").strip().lower() or "auto"
 MUSIC_VOLUME = 0.14                                      # music under the voice
@@ -94,8 +95,9 @@ def ai_script(story):
     facts = [sc["text"] + (f" ({sc['sub']})" if sc.get("sub") else "") for sc in story["scenes"]]
     prompt = (
         "You are the voice of PokePulse, a Pokemon card collector page on Instagram. "
-        "Write the script for a short Reel like a real collector talking to friends - casual, confident, "
-        "excited when it's earned. Use contractions. Plain everyday words. No news-anchor phrases "
+        "Write the script for a short Reel like a hyped-up collector talking to friends - upbeat, high energy, "
+        "fun, confident. Use contractions and short punchy sentences. End most lines with an exclamation mark "
+        "so the voice reads them with energy. Plain everyday words. No news-anchor phrases "
         "('reportedly', 'according to', 'it has been announced'), no corporate words, no hashtags, no emojis.\n"
         "NEVER invent facts, prices, dates or card names that aren't in the source.\n\n"
         f"Write exactly {len(facts)} slides, one per slide below, in the same order and about the same thing.\n"
@@ -158,7 +160,7 @@ def wants_voice(story):
 
 async def _tts(text, out_mp3):
     import edge_tts
-    comm = edge_tts.Communicate(text, VOICE, rate=VOICE_RATE, boundary="WordBoundary")
+    comm = edge_tts.Communicate(text, VOICE, rate=VOICE_RATE, pitch=VOICE_PITCH, boundary="WordBoundary")
     words = []
     with open(out_mp3, "wb") as f:
         async for chunk in comm.stream():
@@ -435,7 +437,7 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
 
 # ---------------------------------------------------------------- voice samples
 
-SAMPLE_LINE = "Pokemon just dropped a new box. Here's what's inside, and what it'll cost you."
+SAMPLE_LINE = "Pokemon just dropped a brand new box! Here's what's inside, and what it'll cost you!"
 
 def make_voice_samples(folder="voice_samples"):
     os.makedirs(folder, exist_ok=True)
