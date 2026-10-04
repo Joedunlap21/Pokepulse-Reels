@@ -511,18 +511,25 @@ def build_gallery_inside_story(captions, posted):
         if h not in links:
             links.append(h)
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-    cands = []
-    for u in links[:30]:
+    cands, fails = [], 0
+    for u in links[:14]:        # newest products are listed first; stay polite so Pokemon.com doesn't block us
+        time.sleep(1.0)
         try:
             p = parse_gallery(u)
         except Exception as e:
             print(f"  gallery page failed {u}: {e}")
+            fails += 1
+            if fails >= 2:
+                break
             continue
         if not p["launch"] or p["launch"] < today or len(p["items"]) < 2 or not (p["images"] or p["og"]):
             continue
         if already_posted(p["title"], posted, captions):
+            print(f"  already posted: {p['title']}")
             continue
         cands.append(p)
+        if len(cands) >= 3:
+            break
     if not cands:
         print("No upcoming official products left to post")
         return None
