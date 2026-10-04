@@ -47,7 +47,7 @@ LOGO_MAX_H = 0.17 * H
 PRODUCT_CY = 0.675
 PRODUCT_BOX = (0.94 * W, 0.42 * H)
 WHIP = 0.24                # seconds for whip-in transitions
-MUSIC_VOLUME = 0.14
+MUSIC_VOLUME = 0.32          # music bed under the voice (0.14 measured ~30 dB under the voice = basically silent)
 
 FONT_FILE = "Montserrat-Black.ttf"
 FONT_URL = "https://raw.githubusercontent.com/google/fonts/main/ofl/montserrat/Montserrat%5Bwght%5D.ttf"
