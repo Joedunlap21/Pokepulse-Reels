@@ -519,7 +519,8 @@ def ai_inside_script(story, source, key):
         "skip boring filler like code cards unless there's nothing else\n"
         "  4: if the source lists TOP CHASE CARDS, name the #1 card and its price, e.g. "
         "'The big pull? Mega Charizard ex at $412!' - otherwise skip this line\n"
-        "  next: release date (month + day, no year), plus box price only if the source has one\n"
+        "  next: release date (month + day, no year) and the MSRP if the source has one, "
+        "e.g. 'Drops November 6 for $39.99!'\n"
         "  5: 'Follow so you never miss a drop!' style\n"
         "Never say 'Pokemon TCG' or the long official name inside a line - say 'booster packs', not "
         "'Pokemon TCG: 30th Celebration booster packs'.\n"
@@ -702,7 +703,7 @@ def date_tile(month, day, out):
 MONTH_RE = r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})"
 
 
-def inside_visuals(line, i, prods, cards, date_png, prod_i):
+def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None):
     """Pictures that match what the voice is saying, in the order it says them.
     Returns [(word_index_where_it_starts, products), ...] - a line can switch picture mid-sentence."""
     words = line.split()
@@ -730,6 +731,11 @@ def inside_visuals(line, i, prods, cards, date_png, prod_i):
     k = at(r"^packs?\b")
     if cards and k is not None:
         hits.append((k, "packs", [{"img": c["img"], "card": True} for c in cards[:3]]))
+    if msrp:                                                   # the box price -> price tag on the product shot
+        tag = f"${msrp:,.2f}"
+        k = at(r"^\$?" + re.escape(f"{msrp:,.2f}".split(".")[0]))
+        if k is not None:
+            hits.append((k, "price", [{"img": prods[0], "price": tag}]))
     m = re.search(MONTH_RE, line, re.I)
     if date_png and m:
         hits.append((len(line[:m.start()].split()), "date", [{"img": date_png}]))
@@ -845,7 +851,7 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         if story.get("topic") == "inside":
             if i > 0:
                 prod_i += 1
-            vis = inside_visuals(line, i, prods, cards, date_png, prod_i)
+            vis = inside_visuals(line, i, prods, cards, date_png, prod_i, story.get("msrp"))
             seg_start = t
             for n_v, (k, prod) in enumerate(vis):
                 nxt = vis[n_v + 1][0] if n_v + 1 < len(vis) else None

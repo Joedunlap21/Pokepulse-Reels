@@ -1,4 +1,5 @@
 import os
+import json
 import re
 import sys
 import html
@@ -420,6 +421,183 @@ def build_drop_story(art):
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
             "caption_full": "\n".join(lines)}
 
+# ---------------------------------------------------------------- topic: upcoming drop - what's inside
+
+INSIDE_RE = r"\b(contains?|includes?|including|comes with|inside|booster packs?|promo cards?|foil|sleeves|dice|coin|playmat)\b"
+UPCOMING_RE = r"\b(upcoming|pre-?orders?|will (?:be )?release|releases?|releasing|launch(?:es|ing)?|coming|available (?:on|starting)|hits? (?:shelves|stores))\b"
+
+def build_inside_story(art):
+    """Upcoming product + exactly what's in the box (packs, promos, accessories) + price/date when given."""
+    sents = all_sentences(art)
+    blob = " ".join([art["title"], art["desc"]] + art["paras"] + art["items"])
+    if not re.search(UPCOMING_RE, blob, re.I):
+        return None
+    inside = [s for s in sents if re.search(INSIDE_RE, s, re.I)]
+    contents = [i for i in art["items"] if re.search(r"pack|promo|card|sleeve|dice|coin|marker|box|pin|figure|playmat|binder|sticker", i, re.I)]
+    when = [s for s in sents if re.search(MONTHS + r"\s+\d{1,2}", s)]
+    price = [s for s in sents if re.search(r"\$\s?\d", s)] + [i for i in art["items"] if re.search(r"\$\s?\d", i)]
+    if not inside and len(contents) < 2:
+        return None
+    imgs = art["images"]
+    scenes = [{"tag": "WHAT'S INSIDE", "img_url": imgs[0], "text": art["title"].upper(), "colors": [YELLOW, WHITE]}]
+    def add(tag, text, colors):
+        scenes.append({"tag": tag, "img_url": imgs[len(scenes) % len(imgs)], "text": text.upper(), "colors": colors})
+    if contents:
+        add("WHAT'S INSIDE", "\n".join(fit_list(contents, 26)), [WHITE, YELLOW])
+    for s in inside[:2]:
+        add("WHAT'S INSIDE", s, [WHITE, YELLOW])
+    if when:
+        add("RELEASE DATE", when[0], [YELLOW, WHITE])
+    price = [p for p in price if p not in inside[:2]]
+    if price:
+        add("PRICE", " ".join(fit_list(price, 28)), [YELLOW, WHITE])
+    if len(scenes) < 3:
+        return None
+    lines = [f"📦 WHAT'S INSIDE: {art['title']}", ""]
+    if contents:
+        lines += ["Inside the box:"] + [f"• {c}" for c in contents[:10]] + [""]
+    for s in inside[:3]:
+        lines.append(s)
+    if when:
+        lines.append("📅 Release: " + when[0])
+    if price:
+        lines.append("💲 Price: " + " ".join(price[:2]))
+    lines += ["", f"Source: {art['source']}", "",
+              "Are you picking this one up? 👇", "",
+              "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+              "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
+    return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
+            "caption_full": "\n".join(lines)}
+
+# Official product pages: launch date + exact "includes" list + official pictures
+GALLERY = "https://www.pokemon.com/us/pokemon-tcg/product-gallery"
+
+def parse_gallery(url):
+    page = get_html(url)
+    i = page.find("<article")
+    art = page[i:page.find("</article>", i)] if i >= 0 else page
+    h1 = re.findall(r"<h1[^>]*>(.*?)</h1>", art, re.S)
+    title = clean_text(re.sub(r"<[^>]+>", " ", h1[0])) if h1 else clean_text((meta_all(page, "og:title") or [""])[0])
+    title = re.split(r"\s+\|\s+", title)[0].strip()
+    m = re.search(r"Launch:\s*([A-Za-z]+\s+\d{1,2},\s*\d{4})", re.sub(r"<[^>]+>", " ", art))
+    launch = None
+    if m:
+        try:
+            launch = datetime.strptime(re.sub(r"\s+", " ", m.group(1)), "%B %d, %Y").replace(tzinfo=timezone.utc)
+        except ValueError:
+            pass
+    items = [clean_text(re.sub(r"<[^>]+>", " ", x)) for x in re.findall(r"<li[^>]*>(.*?)</li>", art, re.S)]
+    items = [x for x in items if x and len(x) < 140]
+    paras = [clean_text(re.sub(r"<[^>]+>", " ", x)) for x in re.findall(r"<p[^>]*>(.*?)</p>", art, re.S)]
+    paras = [p for p in paras if len(p.split()) >= 5]
+    imgs = []
+    for u in re.findall(r'<img[^>]+src="([^"]+)"', art):
+        u = html.unescape(u)
+        u = "https://www.pokemon.com" + u if u.startswith("/") else u
+        if "/inline/" in u and u not in imgs:
+            imgs.append(u)
+    og = (meta_all(page, "og:image") or [""])[0]
+    return {"url": url, "title": title, "launch": launch, "items": items, "paras": paras, "images": imgs, "og": og}
+
+CACHE_FILE = "products_cache.json"
+
+def _load_product_cache():
+    try:
+        with open(CACHE_FILE, encoding="utf-8") as f:
+            data = json.load(f).get("products", {})
+        for v in data.values():
+            v["launch"] = datetime.fromisoformat(v["launch"]).replace(tzinfo=timezone.utc) if v.get("launch") else None
+        return data
+    except Exception as e:
+        print(f"No product cache ({e})")
+        return {}
+
+def build_gallery_inside_story(captions, posted):
+    """Next upcoming official product we haven't posted yet, with exactly what's inside.
+    Uses products_cache.json first and only visits Pokemon.com pages it hasn't seen,
+    so the bot makes 1-3 requests a run instead of 14 (Pokemon.com blocks heavy crawling)."""
+    products = _load_product_cache()
+    links = []
+    try:
+        listing = get_html(GALLERY)
+        for h in re.findall(r'href="((?:https://www\.pokemon\.com)?/us/pokemon-tcg/product-gallery/[a-z0-9\-]+)"', listing):
+            h = h if h.startswith("http") else "https://www.pokemon.com" + h
+            if h not in links:
+                links.append(h)
+    except Exception as e:
+        print(f"Product gallery listing failed ({e}) - using the saved product list")
+    new_links = [u for u in links if u not in products][:5]
+    for u in new_links:          # only brand-new products get fetched, slowly
+        time.sleep(1.5)
+        try:
+            products[u] = parse_gallery(u)
+            print(f"  new product page: {products[u]['title']}")
+        except Exception as e:
+            print(f"  gallery page failed {u}: {e}")
+            break
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    cands = []
+    for p in products.values():
+        if not p.get("launch") or p["launch"] < today or len(p.get("items") or []) < 2 \
+                or not (p.get("images") or p.get("og")):
+            continue
+        if already_posted(p["title"], posted, captions):
+            print(f"  already posted: {p['title']}")
+            continue
+        cands.append(p)
+    if not cands:
+        print("No upcoming official products left to post")
+        return None
+    p = min(cands, key=lambda x: x["launch"])
+    when = p["launch"].strftime("%B ") + str(p["launch"].day)
+    name = re.sub(r"^Pok[eé]mon TCG:\s*", "", p["title"])
+    pool = p["images"] + ([p["og"]] if p["og"] else [])
+    scenes = [{"tag": "WHAT'S INSIDE", "img_url": pool[0], "text": name.upper(), "colors": [YELLOW, WHITE]},
+              {"tag": "WHAT'S INSIDE", "img_url": pool[0], "text": "\n".join(fit_list(p["items"], 30)).upper(),
+               "colors": [WHITE, YELLOW]},
+              {"tag": "RELEASE DATE", "img_url": pool[-1], "text": f"LAUNCHES {when.upper()}", "colors": [YELLOW, WHITE]}]
+    context = (f"{p['title']}. Launch: {p['launch'].strftime('%B %d, %Y')} ({when}). Includes: "
+               + "; ".join(p["items"]) + ". " + " ".join(p.get("paras") or []))
+    if p.get("msrp"):
+        context += f" MSRP: ${p['msrp']:,.2f}."
+    cap = [f"📦 WHAT'S INSIDE: {p['title']}", "", "Inside the box:"] + [f"• {x}" for x in p["items"]] + \
+          ["", f"📅 Launches {p['launch'].strftime('%B %d, %Y')}", "", "Source: Pokemon.com", "",
+           "Are you picking this one up? 👇", "",
+           "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+           "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
+    # set logo + the set's top popular chase cards (real TCGplayer prices) for extra frames
+    logo_url, chase, chase_txt = None, [], ""
+    try:
+        sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 40}).get("data", [])
+        low = p["title"].lower()
+        match = sorted([st for st in sets if st.get("name") and st["name"].lower() in low],
+                       key=lambda st: -len(st["name"]))
+        if match:
+            st = match[0]
+            logo_url = (st.get("images") or {}).get("logo")
+            cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
+                                      "select": "id,name,number,rarity,images,tcgplayer"}).get("data", [])
+            ranked = []
+            for c in cards:
+                m_, v_ = best_market(c)
+                img = (c.get("images") or {}).get("large")
+                if m_ >= CHASE_MIN_PRICE and img and is_popular(c):
+                    ranked.append({"name": c["name"], "price": round(m_, 2), "img": img})
+            ranked.sort(key=lambda x: -x["price"])
+            chase = ranked[:3]
+            if chase:
+                chase_txt = (f" TOP CHASE CARDS in {st['name']} (TCGplayer market): "
+                             + "; ".join(f"{c['name']} ${c['price']:,.2f}" for c in chase) + ".")
+                print(f"  set {st['name']}: chase {[c['name'] for c in chase]}")
+    except Exception as e:
+        print(f"  set/chase lookup failed: {e}")
+    context += chase_txt
+    print(f"Picked [inside] official product: {p['title']} (launch {when})")
+    return {"story_id": p["title"][:40], "key": p["title"].lower(), "scenes": scenes, "topic": "inside",
+            "context": context, "image_pool": pool, "bg_url": p["og"] or None,
+            "logo_url": logo_url, "chase": chase, "msrp": p.get("msrp"),
+            "caption_full": "\n".join(cap)}
+
 # ---------------------------------------------------------------- topic: bulk gold
 
 TCG_API = "https://api.pokemontcg.io/v2"
@@ -468,6 +646,23 @@ def say_dollars(m):
 VARIANT_NAMES = {"normal": "", "holofoil": "HOLO", "reverseHolofoil": "REVERSE HOLO",
                  "1stEditionNormal": "1ST EDITION", "1stEditionHolofoil": "1ST EDITION HOLO"}
 
+# Only post cards collectors actually care about (popular Pokemon / trainers) at real prices.
+# Edit these lists / numbers any time.
+POPULAR = ["charizard", "pikachu", "raichu", "mewtwo", "mew", "eevee", "umbreon", "espeon", "sylveon", "vaporeon",
+           "jolteon", "flareon", "leafeon", "glaceon", "gengar", "lugia", "rayquaza", "gardevoir", "greninja",
+           "lucario", "snorlax", "dragonite", "gyarados", "blastoise", "venusaur", "bulbasaur", "charmander",
+           "squirtle", "gholdengo", "mimikyu", "ditto", "arcanine", "tyranitar", "garchomp", "giratina", "dialga",
+           "palkia", "zekrom", "reshiram", "kyogre", "groudon", "suicune", "ho-oh", "celebi", "jirachi", "darkrai",
+           "alakazam", "dragapult", "ceruledge", "pecharunt", "terapagos", "ogerpon", "iron valiant", "roaring moon",
+           "psyduck", "jigglypuff", "lapras", "articuno", "zapdos", "moltres", "magikarp", "togepi", "piplup",
+           "lillie", "iono", "marnie", "cynthia", "misty", "erika", "n's", "team rocket", "ethan", "hop"]
+BULK_MIN_PRICE = 5.0     # every card in a Bulk Gold reel must be worth at least this
+CHASE_MIN_PRICE = 20.0   # every card in a Top Chase reel must be worth at least this
+
+def is_popular(card):
+    name = (card.get("name") or "").lower()
+    return any(re.search(r"(?<![a-z])" + re.escape(p) + r"(?![a-z])", name) for p in POPULAR)
+
 def build_bulk_story(captions):
     sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 15}).get("data", [])
     sets = [s for s in sets if (s.get("total") or 0) >= 60 and "promo" not in s.get("name", "").lower()]
@@ -483,12 +678,12 @@ def build_bulk_story(captions):
         for c in cards:
             m, v = best_market(c)
             img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
-            if m > 0 and img:
+            if m >= BULK_MIN_PRICE and img and is_popular(c):
                 ranked.append((m, v, c, img))
         ranked.sort(key=lambda x: -x[0])
         top = ranked[:3]   # 3 cards keeps the reel short
-        if len(top) < 3 or top[0][0] < 1.0:
-            print(f"{st['name']}: no commons/uncommons worth $1+ yet")
+        if len(top) < 3:
+            print(f"{st['name']}: not 3 popular commons/uncommons worth ${BULK_MIN_PRICE:.0f}+ yet")
             continue
 
         updated = (top[0][2].get("tcgplayer") or {}).get("updatedAt", "")
@@ -528,12 +723,12 @@ def build_chase_story(captions):
         for c in cards:
             m, v = best_market(c)
             img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
-            if m > 0 and img:
+            if m >= CHASE_MIN_PRICE and img and is_popular(c):
                 ranked.append((m, v, c, img))
         ranked.sort(key=lambda x: -x[0])
         top = ranked[:3]   # top 3 keeps the reel short
-        if len(top) < 3 or top[0][0] < 5:
-            print(f"{st['name']}: no price data for chase cards yet")
+        if len(top) < 3:
+            print(f"{st['name']}: not 3 popular chase cards worth ${CHASE_MIN_PRICE:.0f}+ yet")
             continue
         top = list(reversed(top))   # count down: #5 -> #1
         updated = (top[-1][2].get("tcgplayer") or {}).get("updatedAt", "")
@@ -631,7 +826,7 @@ def vary_images(story, art):
 
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["news", "drops", "sales", "bulk", "chase"]
+TOPICS = ["news", "drops", "sales", "inside", "chase"]   # bulk removed; chase only when run by hand
 
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
@@ -644,8 +839,8 @@ def topic_for_now():
         return "drops"     # 12:30pm ET run
     if 20 <= h <= 23:
         return "sales"     # 5:30pm ET run
-    # 9:30pm ET run: alternate Bulk Gold and Top Chase Cards day by day
-    return "bulk" if datetime.now(timezone.utc).toordinal() % 2 == 0 else "chase"
+    # 9:30pm ET run: Upcoming Drop - What's Inside
+    return "inside"
 
 def build_story():
     posted = set()
@@ -654,7 +849,9 @@ def build_story():
             posted = {l.strip().lower() for l in f if l.strip()}
     captions = recent_ig_captions()
     first = topic_for_now()
-    order = [first] + [t for t in ["news", "drops", "bulk", "chase", "sales"] if t != first]
+    order = [first] + [t for t in ["news", "drops", "inside", "sales"] if t != first]
+    if first == "inside":                       # no upcoming product? post a drop before plain news
+        order = ["inside", "drops", "news", "sales"]
     articles = None
 
     for topic in order:
@@ -665,6 +862,10 @@ def build_story():
                 story["topic"] = topic
                 return story
             continue
+        if topic == "inside":
+            story = build_gallery_inside_story(captions, posted)
+            if story:
+                return story
         if articles is None:
             articles = gather_articles()
             print(f"{len(articles)} recent card-related articles found")
@@ -680,6 +881,10 @@ def build_story():
                 if word_hits(blob, DROP_WORDS) < 2:
                     continue
                 story = build_drop_story(art)
+            elif topic == "inside":
+                if word_hits(blob, DROP_WORDS) < 2 or not re.search(INSIDE_RE, blob, re.I):
+                    continue
+                story = build_inside_story(art)
             elif topic == "sales":
                 if word_hits(art["title"] + " " + art["desc"], SALE_WORDS) < 1 or "$" not in blob:
                     continue
@@ -819,7 +1024,7 @@ def draw_price_box(img, pr):
     center("TCGPLAYER • TREND: CARDMARKET", y1 - 70, 30, (255, 255, 255, 120))
     return Image.alpha_composite(img.convert("RGBA"), layer).convert("RGB")
 
-COVER_LABELS = {"news": "POKÉMON NEWS", "drops": "DROP ALERT", "sales": "BIG SALE",
+COVER_LABELS = {"news": "POKÉMON NEWS", "drops": "DROP ALERT", "sales": "BIG SALE", "inside": "WHAT'S INSIDE",
                 "bulk": "BULK GOLD", "chase": "CHASE CARDS"}
 
 def make_cover(story, out_path="cover.jpg"):
@@ -1085,13 +1290,26 @@ if __name__ == "__main__":
         sys.exit(0)
 
     print(f"Producing Reel: {story['story_id']}")
-    try:
-        from reel_v2 import compile_voiced_reel
-        mp4_file = compile_voiced_reel(story, "pokepulse_reel.mp4")
-        print("Built voiced reel (v2)")
-    except Exception as e:
-        print(f"Voiced reel failed ({e}) - falling back to classic slideshow")
-        mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
+    mp4_file = None
+    # Drops get the drop-alert format (drops_reel.py). Set repo variable DROPS_STYLE=classic to turn it off.
+    if story.get("topic") in ("drops", "inside") and os.getenv("DROPS_STYLE", "").strip().lower() != "classic":
+        try:
+            from drops_reel import compile_drop_reel
+            mp4_file = compile_drop_reel(story, "pokepulse_reel.mp4")
+            print("Built drop-alert reel")
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Drop-alert reel failed ({e}) - using the normal reel")
+            mp4_file = None
+    if mp4_file is None:
+        try:
+            from reel_v2 import compile_voiced_reel
+            mp4_file = compile_voiced_reel(story, "pokepulse_reel.mp4")
+            print("Built voiced reel (v2)")
+        except Exception as e:
+            print(f"Voiced reel failed ({e}) - falling back to classic slideshow")
+            mp4_file = compile_live_action_reel(story, "pokepulse_reel.mp4")
 
     try:
         make_cover(story, "cover.jpg")   # our own thumbnail (replaces any auto cover)
