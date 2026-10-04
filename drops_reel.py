@@ -472,6 +472,9 @@ def ai_drop_script(story, source):
             "  middle: the key facts - WHICH card or product (say its name), the price, where, when\n"
             "  last: a short question or 'Follow for more Pokemon news!' style ending\n"
             "RULES: use ONLY facts from the source. Never invent names, prices, grades, dates or numbers. "
+            "Never add details, feelings or actions the source doesn't state, and never merge two separate "
+            "events from the source into one (if something happened at a different time, don't present it as "
+            "part of the main story). "
             "Write prices exactly like the source with digits, e.g. $8.4 million or $6,003. One price per line max. "
             "Say the card / Pokemon / product name whenever you talk about it.\n"
             "Also write \"thumb\": 2-5 word ALL CAPS cover text, true to the source.\n"
@@ -812,6 +815,63 @@ def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None, art=None)
     return out
 
 
+CTA_SRC = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"   # 3375x4221 - slow host, often times out
+CTA_CLOUD_ID = "pokepulse_assets/newsletter_cta"
+
+
+def cta_image():
+    """Newsletter CTA art. Cached once in your Cloudinary (fast) so the end slide is never blank."""
+    try:
+        import cloudinary
+        import cloudinary.uploader
+        cloud = cloudinary.config().cloud_name
+        if cloud:
+            u = f"https://res.cloudinary.com/{cloud}/image/upload/w_1080/{CTA_CLOUD_ID}.png"
+            r = requests.get(u, timeout=30)
+            if r.status_code == 200 and len(r.content) > 10000:
+                im = Image.open(__import__("io").BytesIO(r.content))
+                im.load()
+                return im.convert("RGB")
+    except Exception as e:
+        print(f"CTA cache miss ({e})")
+    for attempt in range(3):
+        try:
+            r = requests.get(CTA_SRC, headers={"User-Agent": "Mozilla/5.0"}, timeout=120)
+            im = Image.open(__import__("io").BytesIO(r.content))
+            im.load()
+            im = im.convert("RGB")
+            im.thumbnail((1080, 1350), Image.LANCZOS)
+            try:                                       # save a fast copy for next time
+                import cloudinary.uploader
+                tmp = os.path.join(tempfile.gettempdir(), "cta_upload.png")
+                im.save(tmp)
+                cloudinary.uploader.upload(tmp, public_id=CTA_CLOUD_ID, overwrite=True)
+                print("CTA art cached to Cloudinary")
+            except Exception as e:
+                print(f"CTA cache upload failed ({e})")
+            return im
+        except Exception as e:
+            print(f"CTA download attempt {attempt + 1} failed: {e}")
+    return None
+
+
+def make_cta(out_path="f_cta.png"):
+    """Same layout as main.make_cta_slide, but with a reliable image download."""
+    from main import BG, YELLOW as M_YELLOW, get_font, text_w
+    base = Image.new("RGB", (W, H), BG)
+    im = cta_image()
+    if im is not None:
+        im.thumbnail((1080, 1350), Image.LANCZOS)
+        base.paste(im, ((W - im.width) // 2, 160))
+    d = ImageDraw.Draw(base)
+    d.rounded_rectangle([80, 1620, W - 80, 1730], radius=55, fill=M_YELLOW, outline="#FFFFFF", width=3)
+    label = "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER"
+    f = get_font(52)
+    d.text(((W - text_w(d, label, f)) // 2, 1644), label, font=f, fill="#000000")
+    base.save(out_path)
+    return out_path
+
+
 def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     from main import make_cta_slide, RETAILERS
     work = tempfile.mkdtemp(prefix="dropreel_")
@@ -882,7 +942,8 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     try:
         face_src = bg_path if bg_path else prods[0]
         logo_img = Image.open(default_logo) if (story.get("topic") == "inside" and default_logo) else None
-        art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img}
+        if story.get("topic") not in ("news", "sales"):   # item art is built from PRODUCT art, never news photos
+            art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img}
     except Exception as e:
         print(f"Item pictures off ({e})")
     _dates = {}
@@ -955,7 +1016,7 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         t += dur
 
     # newsletter CTA slide + line
-    make_cta_slide("f_cta.png")
+    make_cta("f_cta.png")
     end_secs = 2.2
     if voiced:
         try:
