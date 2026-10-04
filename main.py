@@ -548,9 +548,37 @@ def build_gallery_inside_story(captions, posted):
            "Are you picking this one up? 👇", "",
            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
            "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
+    # set logo + the set's top popular chase cards (real TCGplayer prices) for extra frames
+    logo_url, chase, chase_txt = None, [], ""
+    try:
+        sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 40}).get("data", [])
+        low = p["title"].lower()
+        match = sorted([st for st in sets if st.get("name") and st["name"].lower() in low],
+                       key=lambda st: -len(st["name"]))
+        if match:
+            st = match[0]
+            logo_url = (st.get("images") or {}).get("logo")
+            cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
+                                      "select": "id,name,number,rarity,images,tcgplayer"}).get("data", [])
+            ranked = []
+            for c in cards:
+                m_, v_ = best_market(c)
+                img = (c.get("images") or {}).get("large")
+                if m_ >= CHASE_MIN_PRICE and img and is_popular(c):
+                    ranked.append({"name": c["name"], "price": round(m_, 2), "img": img})
+            ranked.sort(key=lambda x: -x["price"])
+            chase = ranked[:3]
+            if chase:
+                chase_txt = (f" TOP CHASE CARDS in {st['name']} (TCGplayer market): "
+                             + "; ".join(f"{c['name']} ${c['price']:,.2f}" for c in chase) + ".")
+                print(f"  set {st['name']}: chase {[c['name'] for c in chase]}")
+    except Exception as e:
+        print(f"  set/chase lookup failed: {e}")
+    context += chase_txt
     print(f"Picked [inside] official product: {p['title']} (launch {when})")
     return {"story_id": p["title"][:40], "key": p["title"].lower(), "scenes": scenes, "topic": "inside",
             "context": context, "image_pool": pool, "bg_url": p["og"] or None,
+            "logo_url": logo_url, "chase": chase,
             "caption_full": "\n".join(cap)}
 
 # ---------------------------------------------------------------- topic: bulk gold

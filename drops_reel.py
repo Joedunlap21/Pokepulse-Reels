@@ -221,6 +221,8 @@ def product_layer(products):
         cells = [(0.5, 0.5, 0.80, 1.0)]
     elif n == 2:
         cells = [(0.32, 0.36, 0.58, 0.74), (0.66, 0.62, 0.58, 0.74)]
+    elif n == 3 and all(p.get("card") for p in products):   # 3 cards side by side, middle one raised
+        cells = [(0.19, 0.56, 0.36, 0.82), (0.5, 0.46, 0.36, 0.82), (0.81, 0.56, 0.36, 0.82)]
     elif n <= 4:
         cells = [(0.27, 0.26, 0.50, 0.52), (0.73, 0.26, 0.50, 0.52),
                  (0.27, 0.76, 0.50, 0.52), (0.73, 0.76, 0.50, 0.52)][:n]
@@ -511,11 +513,13 @@ def ai_inside_script(story, source, key):
         "You write the voiceover for a 15-20 second Pokemon TCG 'WHAT'S INSIDE' Reel about an UPCOMING product, "
         "in the style of drop-alert pages (fast, hyped, collectors talking to collectors). Short spoken lines, "
         "contractions, plain words, no emojis, no hashtags, no news-anchor phrases.\n"
-        "Write EXACTLY 5 lines, each 4-10 words (the whole Reel must be under 18 seconds):\n"
+        "Write 5 or 6 lines, each 4-10 words (the whole Reel must be under 20 seconds):\n"
         "  1: hook naming the product SHORT, e.g. 'Here's what's inside the Ditto Premium Collection!'\n"
         "  2-3: what's inside, punchy, e.g. '8 booster packs and a Ditto promo!' - "
         "skip boring filler like code cards unless there's nothing else\n"
-        "  4: release date (month + day, no year), plus price only if the source has one\n"
+        "  4: if the source lists TOP CHASE CARDS, name the #1 card and its price, e.g. "
+        "'The big pull? Mega Charizard ex at $412!' - otherwise skip this line\n"
+        "  next: release date (month + day, no year), plus box price only if the source has one\n"
         "  5: 'Follow so you never miss a drop!' style\n"
         "Never say 'Pokemon TCG' or the long official name inside a line - say 'booster packs', not "
         "'Pokemon TCG: 30th Celebration booster packs'.\n"
@@ -677,6 +681,73 @@ def estimate(line):
     return out, t + 0.2
 
 
+def date_tile(month, day, out):
+    """Calendar tile for release-date lines (red header, big day number)."""
+    w, h = 560, 600
+    im = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    d.rounded_rectangle([0, 0, w - 1, h - 1], radius=48, fill=WHITE)
+    d.rounded_rectangle([0, 0, w - 1, 190], radius=48, fill=(229, 9, 20))
+    d.rectangle([0, 120, w - 1, 190], fill=(229, 9, 20))
+    m = stroked_text(month.upper()[:3], 120, WHITE, stroke=0, shadow=False)
+    im.alpha_composite(m, ((w - m.width) // 2, (190 - m.height) // 2))
+    dd = stroked_text(str(day), 300, (20, 20, 20), stroke=0, shadow=False)
+    im.alpha_composite(dd, ((w - dd.width) // 2, 190 + (h - 190 - dd.height) // 2))
+    for x in (130, w - 130):                       # calendar rings
+        d.ellipse([x - 22, -22, x + 22, 22], fill=(40, 40, 40))
+    im.save(out)
+    return out
+
+
+MONTH_RE = r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})"
+
+
+def inside_visuals(line, i, prods, cards, date_png, prod_i):
+    """Pictures that match what the voice is saying, in the order it says them.
+    Returns [(word_index_where_it_starts, products), ...] - a line can switch picture mid-sentence."""
+    words = line.split()
+    low_words = [_norm(w) for w in words]
+    def at(pattern):
+        for k, w in enumerate(low_words):
+            if re.search(pattern, w):
+                return k
+        return None
+    hits = []
+    for c in cards:                                            # a specific chase card by name
+        first = _norm(c["name"]).split()[0]
+        k = at(r"^" + re.escape(first))
+        if k is not None:
+            others = [y for y in cards if y is not c]
+            order = (others[:1] + [c] + others[1:2]) if len(others) >= 2 else [c] + others
+            hits.append((k, "chase", [{"img": x["img"], "price": x["price"], "card": True} for x in order]))
+            break
+    k = at(r"^(pull|pulls|chase|hits?)\b")
+    if cards and k is not None and not any(h[1] == "chase" for h in hits):
+        hits.append((k, "chase", [{"img": c["img"], "price": c["price"], "card": True} for c in cards[:3]]))
+    k = at(r"^(promo|featuring|display|acrylic|figure|pins?|sleeves|binder|playmat|coin|dice)")
+    if k is not None:
+        hits.append((k, "item", [{"img": prods[0]}]))
+    k = at(r"^packs?\b")
+    if cards and k is not None:
+        hits.append((k, "packs", [{"img": c["img"], "card": True} for c in cards[:3]]))
+    m = re.search(MONTH_RE, line, re.I)
+    if date_png and m:
+        hits.append((len(line[:m.start()].split()), "date", [{"img": date_png}]))
+    hits.sort(key=lambda h: h[0])
+    seen, out = set(), []
+    for k, kind, prod in hits:
+        if kind not in seen:
+            seen.add(kind)
+            out.append((k, prod))
+    if not out:
+        if i == 0 and len(prods) >= 2:
+            return [(0, [{"img": prods[0]}, {"img": prods[1]}])]
+        return [(0, [{"img": prods[prod_i % len(prods)]}])]
+    out = out[:2]
+    out[0] = (0, out[0][1])                                    # first picture shows from the start of the line
+    return out
+
+
 def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     from main import make_cta_slide, RETAILERS
     work = tempfile.mkdtemp(prefix="dropreel_")
@@ -725,6 +796,21 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     logo = None
     default_logo = store_badge("WHAT'S INSIDE" if story.get("topic") == "inside" else "DROP ALERT",
                                os.path.join(work, "badge_drop.png"))
+    cards, date_png = [], None
+    if story.get("topic") == "inside":
+        if story.get("logo_url"):                  # official set logo up top, like the reference reels
+            im = download(story["logo_url"], os.path.join(work, "raw_logo"))
+            if im is not None:
+                default_logo = os.path.join(work, "set_logo.png")
+                im.save(default_logo)
+        for k, c in enumerate(story.get("chase") or []):
+            im = download(c["img"], os.path.join(work, f"raw_card_{k}"))
+            if im is not None:
+                cards.append({"name": c["name"], "price": f"${c['price']:,.2f}",
+                              "img": prep_product(im, os.path.join(work, f"card_{k}.png"))})
+        m = re.search(MONTH_RE, source, re.I)
+        if m:
+            date_png = date_tile(m.group(1), int(m.group(2)), os.path.join(work, "date.png"))
     prod_i = 0
     # price tags go on a picture only when we KNOW which product the price is for
     one_price = len(set(re.findall(r"\$\d[\d,]*(?:\.\d{2})?", source))) == 1
@@ -756,7 +842,21 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
             logo = logo_for(first, work) if first else default_logo
 
         prices = list(dict.fromkeys(re.findall(r"\$\d[\d,]*(?:\.\d{2})?", line)))
-        if i == 0 and len(prods) >= 2:
+        if story.get("topic") == "inside":
+            if i > 0:
+                prod_i += 1
+            vis = inside_visuals(line, i, prods, cards, date_png, prod_i)
+            seg_start = t
+            for n_v, (k, prod) in enumerate(vis):
+                nxt = vis[n_v + 1][0] if n_v + 1 < len(vis) else None
+                seg_end = (words[nxt][1] if nxt is not None and nxt < len(words) else t + dur)
+                if seg_end - seg_start > 0.3 or nxt is None:
+                    shots.append({"start": seg_start, "end": seg_end, "chunks": chunks, "logo": logo,
+                                  "bg": bg, "products": prod})
+                    seg_start = seg_end
+            t += dur
+            continue
+        elif i == 0 and len(prods) >= 2:
             products = [{"img": prods[0]}, {"img": prods[1]}]
         elif len(prices) == 1 and one_price:
             # only one price in the whole article -> it belongs to the article's lead product picture
