@@ -263,12 +263,28 @@ def parse_article(src, url, rss_date=None):
             paras.append(t)
 
     images = []
-    for u in meta_all(page, "og:image") + re.findall(r'<img[^>]+(?:data-src|src)="([^"]+)"', seg):
+    # only pictures that are ABOUT this story: the article's main image, plus in-article images whose
+    # alt text / file name shares a real word with the headline (drops related-article thumbnails etc.)
+    topic_words = {w for w in re.findall(r"[a-z0-9]{4,}", (title + " " + desc).lower().replace("pokémon", "pokemon"))
+                   if w not in ("pokemon", "cards", "card", "with", "from", "that", "this", "have", "just", "more",
+                                "after", "their", "they", "will", "into", "about", "what", "your")}
+    cands = [(u, "", True) for u in meta_all(page, "og:image")]
+    for tag in re.findall(r"<img[^>]+>", seg):
+        m = re.search(r'(?:data-src|src)="([^"]+)"', tag)
+        if m:
+            alt = (re.search(r'alt="([^"]*)"', tag) or [None, ""])[1]
+            cands.append((m.group(1), html.unescape(alt), False))
+    for u, alt, is_main in cands:
         u = full_size(u)
         if u.startswith("/"):
             u = src["base"] + u
-        if good_image(u) and u.split("?")[0] not in [x.split("?")[0] for x in images]:
-            images.append(u)
+        if not good_image(u) or u.split("?")[0] in [x.split("?")[0] for x in images]:
+            continue
+        if not is_main:
+            words = set(re.findall(r"[a-z0-9]{4,}", (alt + " " + u.rsplit("/", 1)[-1]).lower().replace("pokémon", "pokemon")))
+            if not (words & topic_words):
+                continue
+        images.append(u)
 
     art = {"source": src["name"], "url": url, "title": title, "desc": desc, "paras": paras,
            "items": items, "images": images[:src.get("max_imgs", 4)], "published": published}
@@ -800,14 +816,7 @@ def extra_images(art, need):
             print(f"Extra images: {nm} cards")
             if len(found) >= need:
                 break
-    # 3. hottest cards from the newest set that has them
-    if len(found) < need:
-        for st in sets[:6]:
-            imgs = card_images(f'set.id:{st["id"]}', need - len(found))
-            if imgs:
-                found += imgs
-                print(f"Extra images: hot cards from {st['name']}")
-                break
+    # (no random "hot cards" filler - every picture must be about the story)
     return found
 
 
@@ -1293,7 +1302,7 @@ if __name__ == "__main__":
     print(f"Producing Reel: {story['story_id']}")
     mp4_file = None
     # Drops get the drop-alert format (drops_reel.py). Set repo variable DROPS_STYLE=classic to turn it off.
-    if story.get("topic") in ("drops", "inside", "news", "sales") and \
+    if story.get("topic") in ("drops", "inside") and \
             os.getenv("DROPS_STYLE", "").strip().lower() != "classic":
         try:
             from drops_reel import compile_drop_reel
