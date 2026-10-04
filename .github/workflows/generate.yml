@@ -8,13 +8,13 @@ on:
         required: false
         default: ''
         type: choice
-        options: ['', 'news', 'drops', 'sales', 'inside', 'chase']
+        options: ['', 'drops', 'sales', 'inside', 'chase']
       voice_mode:
-        description: 'Voiceover: auto = the 9:30am & 5:30pm posts, on = always, off = music only'
+        description: 'Voiceover: on = always (default), auto = only the 5:30pm post, off = music only'
         required: false
-        default: 'auto'
+        default: 'on'
         type: choice
-        options: ['auto', 'on', 'off']
+        options: ['on', 'auto', 'off']
       voice:
         description: 'Voice (run "Voice Samples" to hear them all)'
         required: false
@@ -27,8 +27,8 @@ on:
         default: false
         type: boolean
   schedule:
-    # Times are UTC. 9:30am, 12:30pm, 5:30pm, 9:30pm Eastern (daylight time)
-    - cron: '30 13,16,21,1 * * *'
+    # Times are UTC. 12:30pm, 5:30pm, 9:30pm Eastern (daylight time). 9:30am news post removed.
+    - cron: '30 16,21,1 * * *'
 
 permissions:
   contents: read
@@ -66,7 +66,7 @@ jobs:
           PIXABAY_API_KEY: ${{ secrets.PIXABAY_API_KEY }}
           REEL_TOPIC: ${{ github.event.inputs.topic }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
-          REEL_VOICE_MODE: ${{ github.event.inputs.voice_mode }}
+          REEL_VOICE_MODE: ${{ github.event.inputs.voice_mode || 'on' }}
           # To change the voice for scheduled posts, set a repo VARIABLE named REEL_VOICE
           REEL_VOICE: ${{ github.event.inputs.voice || vars.REEL_VOICE }}
           # Drop-alert format for the drops topic. Set a repo VARIABLE DROPS_STYLE=classic to switch it off
