@@ -632,7 +632,9 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
         out = f"v2_scene_{i}.mp4"
         # article reels: rotate through the image pool so the picture keeps changing
         extra = None
-        if len(pool) > 1:
+        if sc.get("imgs"):                       # pictures of exactly what this slide talks about
+            extra = sc["imgs"][1:]
+        elif len(pool) > 1:
             extra = [spare[(rot + k) % len(spare)] for k in range(3)]
             rot += 2
         live = broll is not None and i == 0      # hook slide = live action
