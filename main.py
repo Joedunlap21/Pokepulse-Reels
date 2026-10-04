@@ -835,15 +835,13 @@ def vary_images(story, art):
 
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["news", "drops", "sales", "inside", "chase"]   # bulk removed; chase only when run by hand
+TOPICS = ["drops", "sales", "inside", "chase"]   # news + bulk removed; chase only when run by hand
 
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
     if forced in TOPICS:
         return forced
     h = datetime.now(timezone.utc).hour
-    if 12 <= h <= 15:
-        return "news"      # 9:30am ET run
     if 16 <= h <= 19:
         return "drops"     # 12:30pm ET run
     if 20 <= h <= 23:
@@ -858,9 +856,8 @@ def build_story():
             posted = {l.strip().lower() for l in f if l.strip()}
     captions = recent_ig_captions()
     first = topic_for_now()
-    order = [first] + [t for t in ["news", "drops", "inside", "sales"] if t != first]
-    if first == "inside":                       # no upcoming product? post a drop before plain news
-        order = ["inside", "drops", "news", "sales"]
+    # News reels are OFF for good - only drops / what's inside / sales. Nothing new? Skip the post.
+    order = [first] + [t for t in ["inside", "drops", "sales"] if t != first]
     articles = None
 
     for topic in order:
@@ -899,7 +896,7 @@ def build_story():
                     continue
                 story = build_article_story(art, "sales")
             else:
-                story = build_article_story(art, "news")
+                continue                          # no general news reels
             if story:
                 print(f"Picked [{topic}] {art['source']}: {art['title']}")
                 story["topic"] = topic
