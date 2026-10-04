@@ -894,6 +894,7 @@ def build_story():
             if story:
                 print(f"Picked [{topic}] {art['source']}: {art['title']}")
                 story["topic"] = topic
+                story["article_images"] = list(art["images"])     # the article's own pictures
                 story["context"] = art["title"] + ". " + " ".join(all_sentences(art)[:12])
                 try:
                     vary_images(story, art)
@@ -1292,7 +1293,8 @@ if __name__ == "__main__":
     print(f"Producing Reel: {story['story_id']}")
     mp4_file = None
     # Drops get the drop-alert format (drops_reel.py). Set repo variable DROPS_STYLE=classic to turn it off.
-    if story.get("topic") in ("drops", "inside") and os.getenv("DROPS_STYLE", "").strip().lower() != "classic":
+    if story.get("topic") in ("drops", "inside", "news", "sales") and \
+            os.getenv("DROPS_STYLE", "").strip().lower() != "classic":
         try:
             from drops_reel import compile_drop_reel
             mp4_file = compile_drop_reel(story, "pokepulse_reel.mp4")

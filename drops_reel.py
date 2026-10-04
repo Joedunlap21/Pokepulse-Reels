@@ -461,6 +461,24 @@ def ai_drop_script(story, source):
     import time
     if story.get("topic") == "inside":
         return ai_inside_script(story, source, key)
+    if story.get("topic") in ("news", "sales"):
+        kind = "BIG CARD SALE" if story["topic"] == "sales" else "POKEMON TCG NEWS"
+        prompt = (
+            f"You write the voiceover for a 15-20 second {kind} Reel for Pokemon card collectors, in the style of "
+            "fast hype collector pages. Short spoken lines, contractions, plain words, no emojis, no hashtags, "
+            "no news-anchor phrases ('reportedly', 'according to').\n"
+            "Write 5 or 6 lines, each 5-12 words:\n"
+            "  1: the hook - the most surprising fact (a price, a record, a name)\n"
+            "  middle: the key facts - WHICH card or product (say its name), the price, where, when\n"
+            "  last: a short question or 'Follow for more Pokemon news!' style ending\n"
+            "RULES: use ONLY facts from the source. Never invent names, prices, grades, dates or numbers. "
+            "Write prices exactly like the source with digits, e.g. $8.4 million or $6,003. One price per line max. "
+            "Say the card / Pokemon / product name whenever you talk about it.\n"
+            "Also write \"thumb\": 2-5 word ALL CAPS cover text, true to the source.\n"
+            'Reply JSON only: {"thumb": "...", "lines": ["...", "..."]}\n\n'
+            f"SOURCE:\n{source[:3500]}"
+        )
+        return _gemini_lines(story, source, key, prompt)
     prompt = (
         "You write the voiceover for a 15-20 second Pokemon TCG DROP ALERT Reel, in the style of restock/drop-alert "
         "pages (fast, hyped, urgent, like telling collectors where to go right now). Short spoken lines, contractions, "
@@ -806,7 +824,9 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         print("   ", l)
 
     # pictures
-    urls = list(dict.fromkeys(story.get("image_pool") or [s["img_url"] for s in story["scenes"]]))[:6]
+    own = story.get("article_images") or []
+    urls = list(dict.fromkeys(own if len(own) >= 2 else
+                              (own + (story.get("image_pool") or [s["img_url"] for s in story["scenes"]]))))[:6]
     prods, bg_path = [], None
     for i, u in enumerate(urls):
         im = download(u, os.path.join(work, f"raw_{i}"))
@@ -840,8 +860,8 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     voiced = os.getenv("REEL_VOICE_MODE", "").strip().lower() not in ("off", "false", "0", "never")
     shots, vo_clips, t = [], [], 0.0
     logo = None
-    default_logo = store_badge("WHAT'S INSIDE" if story.get("topic") == "inside" else "DROP ALERT",
-                               os.path.join(work, "badge_drop.png"))
+    default_logo = store_badge({"inside": "WHAT'S INSIDE", "news": "BREAKING", "sales": "BIG SALE"}
+                               .get(story.get("topic"), "DROP ALERT"), os.path.join(work, "badge_drop.png"))
     cards, date_png = [], None
     if story.get("topic") == "inside":
         if story.get("logo_url"):                  # official set logo up top, like the reference reels
@@ -854,9 +874,6 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
             if im is not None:
                 cards.append({"name": c["name"], "price": f"${c['price']:,.2f}",
                               "img": prep_product(im, os.path.join(work, f"card_{k}.png"))})
-        m = re.search(MONTH_RE, source, re.I)
-        if m:
-            date_png = date_tile(m.group(1), int(m.group(2)), os.path.join(work, "date.png"))
     prod_i = 0
     # price tags go on a picture only when we KNOW which product the price is for
     one_price = len(set(re.findall(r"\$\d[\d,]*(?:\.\d{2})?", source))) == 1
@@ -868,6 +885,15 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img}
     except Exception as e:
         print(f"Item pictures off ({e})")
+    _dates = {}
+    def date_for(line):
+        m = re.search(MONTH_RE, line, re.I)
+        if not m:
+            return None
+        key = (m.group(1).lower(), int(m.group(2)))
+        if key not in _dates:
+            _dates[key] = date_tile(m.group(1), int(m.group(2)), os.path.join(work, f"date_{key[0]}_{key[1]}.png"))
+        return _dates[key]
     for i, line in enumerate(lines):
         words = None
         if voiced:
@@ -887,7 +913,7 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         chunks[-1]["end"] = max(chunks[-1]["end"], t + dur)
 
         store = next((r for r in RETAILERS if _norm(r) in _norm(line)), None)
-        if story.get("topic") == "inside":          # what's-inside reels keep the WHAT'S INSIDE badge
+        if story.get("topic") in ("inside", "news", "sales"):   # these keep their own badge / set logo
             logo = default_logo
         elif store:
             logo = logo_for(store, work)
@@ -896,10 +922,15 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
             logo = logo_for(first, work) if first else default_logo
 
         prices = list(dict.fromkeys(re.findall(r"\$\d[\d,]*(?:\.\d{2})?", line)))
-        if story.get("topic") == "inside" or (art and item_hits(line, art)):
+        date_png = date_for(line)
+        msrp = story.get("msrp")
+        if not msrp and one_price and len(prices) == 1 and not re.search(
+                re.escape(prices[0]) + r"(?:\.\d+)?\s*(million|billion|thousand|k)\b", source + " " + line, re.I):
+            msrp = float(prices[0].strip("$").replace(",", ""))   # the only price in the article -> lead picture
+        if True:                                               # every line: picture matches what's said
             if i > 0:
                 prod_i += 1
-            vis = inside_visuals(line, i, prods, cards, date_png, prod_i, story.get("msrp"), art)
+            vis = inside_visuals(line, i, prods, cards, date_png, prod_i, msrp, art)
             seg_start = t
             for n_v, (k, prod) in enumerate(vis):
                 nxt = vis[n_v + 1][0] if n_v + 1 < len(vis) else None
