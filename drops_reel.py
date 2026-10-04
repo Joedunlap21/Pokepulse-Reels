@@ -703,7 +703,49 @@ def date_tile(month, day, out):
 MONTH_RE = r"\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2})"
 
 
-def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None):
+ITEM_WORDS = [(r"^(booster|packs?)$", "packs"), (r"^coins?$", "coin"), (r"^(dice|die)$", "dice"),
+              (r"^sleeves?$", "sleeves"), (r"^playmats?$", "playmat"), (r"^binders?$", "binder")]
+_item_cache = {}
+
+
+def item_hits(line, art):
+    """[(word_index, products)] for every box item the line mentions (packs, coin, dice, sleeves...)."""
+    if not art:
+        return []
+    import item_art
+    words = [re.sub(r"[^a-z0-9\-]", "", _norm(w)) for w in line.split()]
+    hits, seen = [], set()
+    for k, w in enumerate(words):
+        kind = None
+        for pat, kd in ITEM_WORDS:
+            if re.search(pat, w):
+                kind = kd
+        if w == "box" and k > 0 and words[k - 1] == "deck":
+            kind = "deckbox"
+        if w == "code" and k + 1 < len(words) and words[k + 1].startswith("card"):
+            kind = "code"
+        if w.startswith("card") and k > 0 and (words[k - 1] == "foil" or words[k - 1].isdigit()) \
+                and not (k + 1 < len(words) and words[k + 1].startswith("game")):
+            kind = "cards"
+        if not kind or kind in seen:
+            continue
+        seen.add(kind)
+        n = None
+        for j in range(max(0, k - 3), k):                      # "8 booster packs" -> 8
+            if words[j].isdigit():
+                n = int(words[j])
+        key = (kind, n)
+        if key not in _item_cache:
+            path = os.path.join(art["work"], f"item_{kind}_{n}.png")
+            fn = lambda t: stroked_text(t, 90, (0, 0, 0), stroke=0, shadow=False)
+            _item_cache[key] = item_art.make(kind, art["face"], art["logo"], n, fn, path)
+        if _item_cache[key]:
+            start = k - 1 if (k > 0 and (words[k - 1].isdigit() or kind == "deckbox")) else k
+            hits.append((start, kind, [{"img": _item_cache[key]}]))
+    return hits
+
+
+def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None, art=None):
     """Pictures that match what the voice is saying, in the order it says them.
     Returns [(word_index_where_it_starts, products), ...] - a line can switch picture mid-sentence."""
     words = line.split()
@@ -725,12 +767,10 @@ def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None):
     k = at(r"^(pull|pulls|chase|hits?)\b")
     if cards and k is not None and not any(h[1] == "chase" for h in hits):
         hits.append((k, "chase", [{"img": c["img"], "price": c["price"], "card": True} for c in cards[:3]]))
-    k = at(r"^(promo|featuring|display|acrylic|figure|pins?|sleeves|binder|playmat|coin|dice)")
+    k = at(r"^(promo|featuring|display|acrylic|figure|pins?|oversize)")
     if k is not None:
         hits.append((k, "item", [{"img": prods[0]}]))
-    k = at(r"^packs?\b")
-    if cards and k is not None:
-        hits.append((k, "packs", [{"img": c["img"], "card": True} for c in cards[:3]]))
+    hits += item_hits(line, art)                               # packs, coin, dice, sleeves, playmat...
     if msrp:                                                   # the box price -> price tag on the product shot
         tag = f"${msrp:,.2f}"
         k = at(r"^\$?" + re.escape(f"{msrp:,.2f}".split(".")[0]))
@@ -749,7 +789,7 @@ def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None):
         if i == 0 and len(prods) >= 2:
             return [(0, [{"img": prods[0]}, {"img": prods[1]}])]
         return [(0, [{"img": prods[prod_i % len(prods)]}])]
-    out = out[:2]
+    out = out[:3]
     out[0] = (0, out[0][1])                                    # first picture shows from the start of the line
     return out
 
@@ -820,6 +860,14 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     prod_i = 0
     # price tags go on a picture only when we KNOW which product the price is for
     one_price = len(set(re.findall(r"\$\d[\d,]*(?:\.\d{2})?", source))) == 1
+    # what the item pictures are built from: the product's own official art + set logo
+    art = None
+    try:
+        face_src = bg_path if bg_path else prods[0]
+        logo_img = Image.open(default_logo) if (story.get("topic") == "inside" and default_logo) else None
+        art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img}
+    except Exception as e:
+        print(f"Item pictures off ({e})")
     for i, line in enumerate(lines):
         words = None
         if voiced:
@@ -848,10 +896,10 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
             logo = logo_for(first, work) if first else default_logo
 
         prices = list(dict.fromkeys(re.findall(r"\$\d[\d,]*(?:\.\d{2})?", line)))
-        if story.get("topic") == "inside":
+        if story.get("topic") == "inside" or (art and item_hits(line, art)):
             if i > 0:
                 prod_i += 1
-            vis = inside_visuals(line, i, prods, cards, date_png, prod_i, story.get("msrp"))
+            vis = inside_visuals(line, i, prods, cards, date_png, prod_i, story.get("msrp"), art)
             seg_start = t
             for n_v, (k, prod) in enumerate(vis):
                 nxt = vis[n_v + 1][0] if n_v + 1 < len(vis) else None
