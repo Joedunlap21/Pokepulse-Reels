@@ -511,11 +511,14 @@ def ai_inside_script(story, source, key):
         "You write the voiceover for a 15-20 second Pokemon TCG 'WHAT'S INSIDE' Reel about an UPCOMING product, "
         "in the style of drop-alert pages (fast, hyped, collectors talking to collectors). Short spoken lines, "
         "contractions, plain words, no emojis, no hashtags, no news-anchor phrases.\n"
-        "Write 5 or 6 lines, each 5-13 words:\n"
-        "  1: hook naming the product, e.g. 'Here's what's inside the new 30th Celebration Booster Bundle!'\n"
-        "  next 2-3 lines: EXACTLY what's inside - number of packs, promo cards, sleeves, dice, etc.\n"
-        "  then: release date and price - only if in the source\n"
-        "  last: 'Follow so you never miss a drop!' style\n"
+        "Write EXACTLY 5 lines, each 4-10 words (the whole Reel must be under 18 seconds):\n"
+        "  1: hook naming the product SHORT, e.g. 'Here's what's inside the Ditto Premium Collection!'\n"
+        "  2-3: what's inside, punchy, e.g. '8 booster packs and a Ditto promo!' - "
+        "skip boring filler like code cards unless there's nothing else\n"
+        "  4: release date (month + day, no year), plus price only if the source has one\n"
+        "  5: 'Follow so you never miss a drop!' style\n"
+        "Never say 'Pokemon TCG' or the long official name inside a line - say 'booster packs', not "
+        "'Pokemon TCG: 30th Celebration booster packs'.\n"
         "RULES: use ONLY facts from the source. Never invent contents, quantities, dates, prices or stores. "
         "Write numbers and prices with digits exactly like the source, e.g. 6 booster packs, $26.94. "
         "One price per line max.\n"
@@ -744,7 +747,9 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         chunks[-1]["end"] = max(chunks[-1]["end"], t + dur)
 
         store = next((r for r in RETAILERS if _norm(r) in _norm(line)), None)
-        if store:
+        if story.get("topic") == "inside":          # what's-inside reels keep the WHAT'S INSIDE badge
+            logo = default_logo
+        elif store:
             logo = logo_for(store, work)
         elif logo is None:
             first = next((r for r in RETAILERS if _norm(r) in _norm(source)), None)
@@ -757,7 +762,8 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
             # only one price in the whole article -> it belongs to the article's lead product picture
             products = [{"img": prods[0], "price": prices[0]}]
         else:
-            if i > 0 and i % 2 == 0:
+            # keep the picture changing: every line on what's-inside reels, every 2nd line on drop alerts
+            if i > 0 and (story.get("topic") == "inside" or i % 2 == 0):
                 prod_i += 1
             products = [{"img": prods[prod_i % len(prods)]}]
         shots.append({"start": t, "end": t + dur, "chunks": chunks, "logo": logo, "bg": bg, "products": products})

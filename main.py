@@ -543,7 +543,7 @@ def build_gallery_inside_story(captions, posted):
            "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
     print(f"Picked [inside] official product: {p['title']} (launch {when})")
     return {"story_id": p["title"][:40], "key": p["title"].lower(), "scenes": scenes, "topic": "inside",
-            "context": context, "image_pool": pool[:-1] or pool, "bg_url": p["og"] or None,
+            "context": context, "image_pool": pool, "bg_url": p["og"] or None,
             "caption_full": "\n".join(cap)}
 
 # ---------------------------------------------------------------- topic: bulk gold
