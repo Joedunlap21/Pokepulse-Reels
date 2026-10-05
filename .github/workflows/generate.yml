@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
         type: choice
-        options: ['', 'drops', 'sales', 'inside', 'chase']
+        options: ['', 'drops', 'sales', 'inside', 'chase', 'mover']
       voice_mode:
         description: 'Voiceover: on = always (default), auto = only the 5:30pm post, off = music only'
         required: false
@@ -53,6 +53,13 @@ jobs:
         run: |
           pip install requests pillow cloudinary edge-tts numpy opencv-python-headless
 
+      - name: Restore yesterday's card prices (Card of the Day)
+        uses: actions/cache/restore@v4
+        with:
+          path: price_snapshot.json
+          key: prices-${{ github.run_id }}
+          restore-keys: prices-
+
       - name: Generate & Publish Reel
         env:
           CLOUDINARY_URL: ${{ secrets.CLOUDINARY_URL }}
@@ -78,6 +85,13 @@ jobs:
           # Drop-alert format for the drops topic. Set a repo VARIABLE DROPS_STYLE=classic to switch it off
           DROPS_STYLE: ${{ vars.DROPS_STYLE }}
         run: python main.py
+
+      - name: Save today's card prices
+        if: always() && hashFiles('price_snapshot.json') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: price_snapshot.json
+          key: prices-${{ github.run_id }}
 
       - name: Save video for download
         if: always()
