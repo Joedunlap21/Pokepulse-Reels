@@ -259,7 +259,7 @@ def hblur(arr, k):
 class Background:
     def __init__(self, src, blur=0):
         self.cap = None
-        if src.lower().endswith((".mp4", ".mov", ".webm")):
+        if src.lower().endswith((".mp4", ".mov", ".webm", ".m4v")):
             self.cap = cv2.VideoCapture(src)
         else:
             im = Image.open(src).convert("RGB")
@@ -319,7 +319,8 @@ def render_video(shots, out_path, end_card=None, end_secs=2.2, vo_clips=(), musi
     bgs, logos, prods = {}, {}, {}
     for s in shots:
         if s.get("bg") and s["bg"] not in bgs:
-            bgs[s["bg"]] = Background(s["bg"], 0 if s["bg"].lower().endswith((".mp4", ".mov")) else bg_blur)
+            own = s["bg"].replace("\\", "/").startswith("clips/")
+            bgs[s["bg"]] = Background(s["bg"], 0 if s["bg"].lower().endswith((".mp4", ".mov", ".m4v")) or own else bg_blur)
         if s.get("logo") and s["logo"] not in logos:
             logos[s["logo"]] = with_shadow(fit(Image.open(s["logo"]).convert("RGBA"), LOGO_MAX_W, LOGO_MAX_H),
                                            blur=12, off=(0, 8), alpha=140)
@@ -926,6 +927,36 @@ def make_cta(out_path="f_cta.png"):
     return out_path
 
 
+BG_EXT = (".mp4", ".mov", ".m4v", ".jpg", ".jpeg", ".png", ".webp")
+
+
+def pick_own_background(story, source):
+    """Pick a video/photo from clips/ whose FILE NAME matches the post.
+    e.g. target_restock.mp4 -> used when the post mentions Target;  30th_celebration_packs.jpg -> 30th posts.
+    Files named general_*.mp4 / .jpg can be used for any post."""
+    files = [os.path.join("clips", f) for f in (os.listdir("clips") if os.path.isdir("clips") else [])
+             if f.lower().endswith(BG_EXT) and os.path.getsize(os.path.join("clips", f)) > 20_000]
+    if not files:
+        return None
+    text = _norm(" ".join([source, story.get("product_name", ""), story.get("set_name", ""),
+                           story.get("topic", "")]))
+    def score(path):
+        words = [w for w in re.split(r"[^a-z0-9]+", os.path.splitext(os.path.basename(path))[0].lower())
+                 if len(w) > 2 and w not in ("general", "clip", "video", "img", "image", "bg", "background")]
+        return sum(1 for w in words if w in text)
+    scored = sorted(((score(f), random.random(), f) for f in files), reverse=True)
+    best = scored[0]
+    if best[0] > 0:
+        print(f"Background: your file {best[2]} (matches the post)")
+        return best[2]
+    general = [f for f in files if os.path.basename(f).lower().startswith("general")]
+    if general:
+        pick = random.choice(general)
+        print(f"Background: your general file {pick}")
+        return pick
+    return None
+
+
 def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
     from main import make_cta_slide, RETAILERS
     work = tempfile.mkdtemp(prefix="dropreel_")
@@ -958,9 +989,13 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
             bg_path = os.path.join(work, "bg.jpg")
             im.convert("RGB").save(bg_path, quality=92)
 
-    # background: your clips / free store b-roll if available, else the blurred hero picture
+    # background: YOUR clips/photos in the clips/ folder first (best name match), then free b-roll,
+    # else the blurred product picture
     bg = bg_path
-    if os.getenv("DROPS_BROLL", "on").lower() != "off":
+    mine = pick_own_background(story, source)
+    if mine:
+        bg = mine
+    elif os.getenv("DROPS_BROLL", "on").lower() != "off":
         try:
             import reel_v2
             reel_v2.BROLL_QUERIES["drops_store"] = ["store shelves", "shopping cart store", "toy store",
