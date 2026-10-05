@@ -1318,6 +1318,7 @@ def publish_to_facebook(video_url, caption):
         return False
     page_id, token, name = pg
     print(f"\n===== Posting Reel to Facebook Page ({name}) =====")
+    ok = False
     try:
         start = requests.post(f"{GRAPH}/{page_id}/video_reels",
                               data={"upload_phase": "start", "access_token": token}, timeout=60).json()
@@ -1330,18 +1331,45 @@ def publish_to_facebook(video_url, caption):
                 "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED",
                 "description": caption, "access_token": token}, timeout=60).json()
             print("FB Reel publish:", fin)
-            if fin.get("success"):
-                return True
+            ok = bool(fin.get("success"))
         else:
             print("FB Reels start error:", start)
-        # fallback: regular Page video post
-        res = requests.post(f"{GRAPH}/{page_id}/videos", data={
-            "file_url": video_url, "description": caption, "access_token": token}, timeout=300).json()
-        print("FB video post:", res)
-        return "id" in res
+        if not ok:
+            # fallback: regular Page video post
+            res = requests.post(f"{GRAPH}/{page_id}/videos", data={
+                "file_url": video_url, "description": caption, "access_token": token}, timeout=300).json()
+            print("FB video post:", res)
+            ok = "id" in res
     except Exception as e:
         print("Facebook post failed:", e)
-        return False
+    publish_facebook_story(page_id, token, video_url)
+    return ok
+
+def publish_facebook_story(page_id, token, video_url):
+    """Add the reel to the Facebook Page's Story too."""
+    print("FB Story: uploading...")
+    try:
+        start = requests.post(f"{GRAPH}/{page_id}/video_stories",
+                              data={"upload_phase": "start", "access_token": token}, timeout=60).json()
+        vid = start.get("video_id")
+        if not vid:
+            print("FB Story start error:", start)
+            return False
+        up = requests.post(f"https://rupload.facebook.com/video-upload/v21.0/{vid}",
+                           headers={"Authorization": f"OAuth {token}", "file_url": video_url}, timeout=300).json()
+        print("FB Story upload:", up)
+        fin = {}
+        for _ in range(6):
+            fin = requests.post(f"{GRAPH}/{page_id}/video_stories", data={
+                "upload_phase": "finish", "video_id": vid, "access_token": token}, timeout=60).json()
+            if fin.get("success") or fin.get("post_id"):
+                print("FB Story publish:", fin)
+                return True
+            time.sleep(10)
+        print("FB Story publish error:", fin)
+    except Exception as e:
+        print("Facebook story failed:", e)
+    return False
 
 def publish_content(video_url, caption, cover_url=None):
     accounts = []
