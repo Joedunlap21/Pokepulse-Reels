@@ -27,8 +27,8 @@ on:
         default: false
         type: boolean
   schedule:
-    # Times are UTC. 12:30pm, 5:30pm, 9:30pm Eastern (daylight time). 9:30am news post removed.
-    - cron: '30 16,21,1 * * *'
+    # Times are UTC = 9:30am, 12:30pm, 3:30pm, 5:30pm, 7:30pm, 9:30pm Eastern (daylight time).
+    - cron: '30 13,16,19,21,23,1 * * *'
 
 permissions:
   contents: read
