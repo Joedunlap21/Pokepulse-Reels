@@ -67,7 +67,7 @@ def google_image(query):
         for it in r.get("items", []):
             title = (it.get("title") or "") + " " + (it.get("image", {}).get("contextLink") or "")
             w, h = it.get("image", {}).get("width", 0), it.get("image", {}).get("height", 0)
-            if min(w, h) >= 400 and _match(query, title) >= 0.6 and not it["link"].lower().endswith(".svg"):
+            if min(w, h) >= 300 and _match(query, title) >= 0.5 and not it["link"].lower().endswith(".svg"):
                 url = it["link"]
                 break
         if not url and r.get("error"):
@@ -104,7 +104,8 @@ def find(kind, set_name="", product="", name=""):
     # 2. Google image search
     label = {"packs": "booster pack", "promo": f"{name} promo card", "playmat": "playmat", "coin": "coin",
              "dice": "dice", "sleeves": "card sleeves", "deckbox": "deck box", "binder": "binder",
-             "code": "code card", "cards": "cards", "figure": f"{name} figure"}.get(kind, kind)
+             "code": "code card", "cards": "cards", "figure": f"{name} figure",
+             "oversize": f"{name} oversize card", "display": "acrylic card display"}.get(kind, kind)
     q = f"{product or set_name} {label}".strip()
     url = google_image(q)
     if url:

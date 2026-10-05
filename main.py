@@ -554,6 +554,8 @@ def build_gallery_inside_story(captions, posted):
     today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
     cands = []
     for p in products.values():
+        if "interruption" in (p.get("title") or "").lower():   # Pokemon.com bot-check page, not a product
+            continue
         if not p.get("launch") or p["launch"] < today or len(p.get("items") or []) < 2 \
                 or not (p.get("images") or p.get("og")):
             continue

@@ -823,16 +823,26 @@ def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None, art=None)
     k = at(r"^(pull|pulls|chase|hits?)\b")
     if cards and k is not None and not any(h[1] == "chase" for h in hits):
         hits.append((k, "chase", [{"img": c["img"], "price": c["price"], "card": True} for c in cards[:3]]))
-    k = at(r"^(promo|featuring|display|acrylic|figure|pins?|oversize)")
-    if k is not None:
+    # promo / figure / oversize card / display: real photo (TCGplayer, then Google), else the product shot
+    fn = lambda t: stroked_text(t, 90, (0, 0, 0), stroke=0, shadow=False)
+    for pat, kind in ((r"^promo", "promo"), (r"^figures?", "figure"), (r"^oversized?", "oversize"),
+                      (r"^(display|acrylic)", "display")):
+        k = at(pat)
+        if k is None:
+            continue
         img = prods[0]
-        if art and re.search(r"^promo", low_words[k]):        # "a Ditto promo" -> the real Ditto promo card
-            nm = re.sub(r"[^A-Za-z\-]", "", words[k - 1]) if k > 0 else ""
-            if nm and nm.lower() not in ("a", "an", "the", "foil"):
-                got = real_item("promo", None, art, os.path.join(art["work"], f"promo_{nm}.png"),
-                                lambda t: stroked_text(t, 90, (0, 0, 0), stroke=0, shadow=False), name=nm)
-                img = got or img
-        hits.append((k, "item", [{"img": img, "card": img != prods[0]}]))
+        if art:
+            nm = ""
+            prev = re.sub(r"[^A-Za-z\-]", "", words[k - 1]) if k > 0 else ""
+            if prev and prev.lower() not in ("a", "an", "the", "foil", "1", "and", "plus", "big"):
+                nm = prev                                      # "a Ditto promo"
+            if not nm:                                         # "1 foil promo" -> "...promo card featuring Mew"
+                word = {"promo": "promo", "figure": "figure", "oversize": "oversize", "display": "display"}[kind]
+                m = re.search(word + r"[^.;]*?featuring ([A-Z][A-Za-z\-]+)", art.get("source", ""))
+                nm = m.group(1) if m else ""
+            got = real_item(kind, None, art, os.path.join(art["work"], f"{kind}_{nm or 'x'}.png"), fn, name=nm)
+            img = got or img
+        hits.append((k, "item_" + kind, [{"img": img, "card": kind in ("promo", "oversize") and img != prods[0]}]))
     hits += item_hits(line, art)                               # packs, coin, dice, sleeves, playmat...
     if msrp:                                                   # the box price -> price tag on the product shot
         tag = f"${msrp:,.2f}"
@@ -986,7 +996,8 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         logo_img = Image.open(default_logo) if (story.get("topic") == "inside" and default_logo) else None
         if story.get("topic") not in ("news", "sales"):   # item art is built from PRODUCT art, never news photos
             art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img,
-                   "set_name": story.get("set_name", ""), "product": story.get("product_name") or story.get("story_id", "")}
+                   "set_name": story.get("set_name", ""), "product": story.get("product_name") or story.get("story_id", ""),
+                   "source": source}
     except Exception as e:
         print(f"Item pictures off ({e})")
     _dates = {}
