@@ -1276,19 +1276,10 @@ def publish_to_account(video_url, caption, graph, user_id, access_token, label, 
         print("Story Error:", s_res)
     return published
 
-def second_account():
-    """@pokepulse.io - same Facebook-login setup as card.stax (never-expiring Page token)."""
-    token = os.getenv("IG_TOKEN_2", "").strip()
-    user_id = os.getenv("IG_USER_ID_2", "").strip()
-    if not token or not user_id:
-        print("IG_TOKEN_2 / IG_USER_ID_2 not set - only posting to the main account.")
-        return None
-    return (GRAPH, user_id, token, "second account (@pokepulse.io)")
-
 def facebook_page():
-    """Facebook Page to cross-post Reels to. Uses FB_PAGE_TOKEN (falls back to the IG tokens,
+    """Facebook Page to cross-post Reels to. Uses FB_PAGE_TOKEN (falls back to the IG token,
     which are Page tokens from the Facebook-login setup). FB_PAGE_ID optional - auto-detected."""
-    token = (os.getenv("FB_PAGE_TOKEN") or os.getenv("IG_TOKEN_2") or os.getenv("IG_ACCESS_TOKEN") or "").strip()
+    token = (os.getenv("FB_PAGE_TOKEN") or os.getenv("IG_ACCESS_TOKEN") or "").strip()
     page_id = os.getenv("FB_PAGE_ID", "").strip()
     if not token or os.getenv("FB_POST", "on").strip().lower() == "off":
         return None
@@ -1376,9 +1367,6 @@ def publish_content(video_url, caption, cover_url=None):
     token1 = os.getenv("IG_ACCESS_TOKEN", "").strip()
     if token1:
         accounts.append((GRAPH, IG_USER_ID, token1, "main account (IG_ACCESS_TOKEN)"))
-    acct2 = second_account()
-    if acct2:
-        accounts.append(acct2)
 
     any_ok = False
     for graph, uid, tok, label in accounts:
