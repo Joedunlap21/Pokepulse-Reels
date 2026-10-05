@@ -1,5 +1,5 @@
 {
- "_note": "Cache of Pokemon.com product-gallery pages (the bot adds new ones itself). msrp = US MSRP from billsarchive.com 30th Celebration list.",
+ "_note": "Cache of Pokemon.com product-gallery pages (the bot adds new ones itself). msrp = US MSRP from billsarchive.com 30th Celebration list. item_images = photos picked by hand from Google Images results (GameStop product photos).",
  "products": {
   "https://www.pokemon.com/us/pokemon-tcg/product-gallery/30th-celebration-ditto-premium-collection": {
    "url": "https://www.pokemon.com/us/pokemon-tcg/product-gallery/30th-celebration-ditto-premium-collection",
@@ -31,7 +31,10 @@
     "https://www.pokemon.com/static-assets/content-assets/cms2/img/trading-card-game/series/incrementals/2026/30th-celebration-binder-collection/inline/01.png"
    ],
    "og": "https://www.pokemon.com/static-assets/content-assets/cms2/img/trading-card-game/series/incrementals/2026/30th-celebration-binder-collection/30th-celebration-binder-collection-169-en.png",
-   "msrp": 31.99
+   "msrp": 31.99,
+   "item_images": {
+    "binder": "https://media.gamestop.com/i/gamestop/20036370_ALT05?w=1000"
+   }
   },
   "https://www.pokemon.com/us/pokemon-tcg/product-gallery/30th-celebration-battle-deck-espeon-ex-and-30th-celebration-battle-deck-umbreon-ex": {
    "url": "https://www.pokemon.com/us/pokemon-tcg/product-gallery/30th-celebration-battle-deck-espeon-ex-and-30th-celebration-battle-deck-umbreon-ex",
@@ -88,7 +91,13 @@
     "https://www.pokemon.com/static-assets/content-assets/cms2/img/trading-card-game/series/incrementals/2026/30th-celebration-figure-collection/inline/02.png"
    ],
    "og": "https://www.pokemon.com/static-assets/content-assets/cms2/img/trading-card-game/series/incrementals/2026/30th-celebration-figure-collection/30th-celebration-figure-collection-169-en.png",
-   "msrp": 29.99
+   "msrp": 29.99,
+   "item_images": {
+    "promo": "https://media.gamestop.com/i/gamestop/20036367_ALT04?w=1000",
+    "oversize": "https://media.gamestop.com/i/gamestop/20036367_ALT03?w=1000",
+    "figure": "https://media.gamestop.com/i/gamestop/20036367_ALT05?w=1000",
+    "figure2": "https://media.gamestop.com/i/gamestop/20036367_ALT06?w=1000"
+   }
   }
  }
 }

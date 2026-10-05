@@ -619,7 +619,7 @@ def build_gallery_inside_story(captions, posted):
     return {"story_id": p["title"][:40], "key": p["title"].lower(), "scenes": scenes, "topic": "inside",
             "context": context, "image_pool": pool, "bg_url": p["og"] or None,
             "logo_url": logo_url, "chase": chase, "msrp": p.get("msrp"),
-            "set_name": set_name, "product_name": p["title"],
+            "set_name": set_name, "product_name": p["title"], "item_images": p.get("item_images") or {},
             "caption_full": "\n".join(cap)}
 
 # ---------------------------------------------------------------- topic: bulk gold

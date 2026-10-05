@@ -739,7 +739,9 @@ def real_item(kind, n, art, path, font_fn, name=""):
     try:
         key = (kind, name)
         if key not in _real_cache:
-            url = image_finder.find(kind, art.get("set_name", ""), art.get("product", ""), name)
+            # 1st: photos picked from Google Images for this exact product (products_cache.json)
+            url = (art.get("item_images") or {}).get(kind) or \
+                image_finder.find(kind, art.get("set_name", ""), art.get("product", ""), name)
             im = download(url, path + ".raw") if url else None
             _real_cache[key] = prep_product(im, path + ".cut.png") if im is not None and min(im.size) >= 250 else None
         cut = _real_cache[key]
@@ -997,7 +999,7 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         if story.get("topic") not in ("news", "sales"):   # item art is built from PRODUCT art, never news photos
             art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img,
                    "set_name": story.get("set_name", ""), "product": story.get("product_name") or story.get("story_id", ""),
-                   "source": source}
+                   "source": source, "item_images": story.get("item_images") or {}}
     except Exception as e:
         print(f"Item pictures off ({e})")
     _dates = {}
