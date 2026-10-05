@@ -729,6 +729,40 @@ ITEM_WORDS = [(r"^(booster|packs?)$", "packs"), (r"^coins?$", "coin"), (r"^(dice
 _item_cache = {}
 
 
+_real_cache = {}
+
+
+def real_item(kind, n, art, path, font_fn, name=""):
+    """A REAL photo of the item (TCGplayer first, then Google images); None if nothing trustworthy found."""
+    import image_finder
+    import item_art
+    try:
+        key = (kind, name)
+        if key not in _real_cache:
+            url = image_finder.find(kind, art.get("set_name", ""), art.get("product", ""), name)
+            im = download(url, path + ".raw") if url else None
+            _real_cache[key] = prep_product(im, path + ".cut.png") if im is not None and min(im.size) >= 250 else None
+        cut = _real_cache[key]
+        if not cut:
+            return None
+        im = Image.open(cut).convert("RGBA")
+        if kind == "packs" and n and n > 1:            # fan of the real pack + x8 bubble
+            k = min(n, 5)
+            im.thumbnail((380, 640))
+            canvas = Image.new("RGBA", (380 + 150 * (k - 1) + 200, 800), (0, 0, 0, 0))
+            for j in range(k):
+                r = im.rotate(-(j - (k - 1) / 2) * 9, resample=Image.BICUBIC, expand=True)
+                canvas.alpha_composite(r, (100 + j * 150 - (r.width - im.width) // 2, int(40 + abs(j - (k - 1) / 2) * 22)))
+            im = canvas.crop(canvas.getbbox())
+        if n and n > 1:
+            im = item_art._badge(im, f"x{n}", font_fn)
+        im.save(path)
+        return path
+    except Exception as e:
+        print(f"  real picture for {kind} failed: {e}")
+        return None
+
+
 def item_hits(line, art):
     """[(word_index, products)] for every box item the line mentions (packs, coin, dice, sleeves...)."""
     if not art:
@@ -759,7 +793,8 @@ def item_hits(line, art):
         if key not in _item_cache:
             path = os.path.join(art["work"], f"item_{kind}_{n}.png")
             fn = lambda t: stroked_text(t, 90, (0, 0, 0), stroke=0, shadow=False)
-            _item_cache[key] = item_art.make(kind, art["face"], art["logo"], n, fn, path)
+            _item_cache[key] = real_item(kind, n, art, path, fn) or \
+                item_art.make(kind, art["face"], art["logo"], n, fn, path)
         if _item_cache[key]:
             start = k - 1 if (k > 0 and (words[k - 1].isdigit() or kind == "deckbox")) else k
             hits.append((start, kind, [{"img": _item_cache[key]}]))
@@ -790,7 +825,14 @@ def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None, art=None)
         hits.append((k, "chase", [{"img": c["img"], "price": c["price"], "card": True} for c in cards[:3]]))
     k = at(r"^(promo|featuring|display|acrylic|figure|pins?|oversize)")
     if k is not None:
-        hits.append((k, "item", [{"img": prods[0]}]))
+        img = prods[0]
+        if art and re.search(r"^promo", low_words[k]):        # "a Ditto promo" -> the real Ditto promo card
+            nm = re.sub(r"[^A-Za-z\-]", "", words[k - 1]) if k > 0 else ""
+            if nm and nm.lower() not in ("a", "an", "the", "foil"):
+                got = real_item("promo", None, art, os.path.join(art["work"], f"promo_{nm}.png"),
+                                lambda t: stroked_text(t, 90, (0, 0, 0), stroke=0, shadow=False), name=nm)
+                img = got or img
+        hits.append((k, "item", [{"img": img, "card": img != prods[0]}]))
     hits += item_hits(line, art)                               # packs, coin, dice, sleeves, playmat...
     if msrp:                                                   # the box price -> price tag on the product shot
         tag = f"${msrp:,.2f}"
@@ -943,7 +985,8 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
         face_src = bg_path if bg_path else prods[0]
         logo_img = Image.open(default_logo) if (story.get("topic") == "inside" and default_logo) else None
         if story.get("topic") not in ("news", "sales"):   # item art is built from PRODUCT art, never news photos
-            art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img}
+            art = {"work": work, "face": Image.open(face_src).convert("RGB"), "logo": logo_img,
+                   "set_name": story.get("set_name", ""), "product": story.get("product_name") or story.get("story_id", "")}
     except Exception as e:
         print(f"Item pictures off ({e})")
     _dates = {}

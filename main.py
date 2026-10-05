@@ -583,6 +583,10 @@ def build_gallery_inside_story(captions, posted):
            "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
     # set logo + the set's top popular chase cards (real TCGplayer prices) for extra frames
     logo_url, chase, chase_txt = None, [], ""
+    set_name = ""
+    sm = re.search(r"(30th Celebration|Mega Evolution[^—:]*?|Ascended Heroes|Pitch Black|Phantasmal Flames)", p["title"])
+    if sm:
+        set_name = sm.group(1).strip()
     try:
         sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 40}).get("data", [])
         low = p["title"].lower()
@@ -590,6 +594,7 @@ def build_gallery_inside_story(captions, posted):
                        key=lambda st: -len(st["name"]))
         if match:
             st = match[0]
+            set_name = st["name"]
             logo_url = (st.get("images") or {}).get("logo")
             cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
                                       "select": "id,name,number,rarity,images,tcgplayer"}).get("data", [])
@@ -612,6 +617,7 @@ def build_gallery_inside_story(captions, posted):
     return {"story_id": p["title"][:40], "key": p["title"].lower(), "scenes": scenes, "topic": "inside",
             "context": context, "image_pool": pool, "bg_url": p["og"] or None,
             "logo_url": logo_url, "chase": chase, "msrp": p.get("msrp"),
+            "set_name": set_name, "product_name": p["title"],
             "caption_full": "\n".join(cap)}
 
 # ---------------------------------------------------------------- topic: bulk gold
