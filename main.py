@@ -822,17 +822,28 @@ def _tcgplayer_daily_change(pid):
                 best = (sold, pts[-2][1], pts[-1][1], pts[-1][0])
     return best[1:] if best else None
 
+MOVER_NAMES = ["charizard", "pikachu", "umbreon", "espeon", "sylveon", "eevee", "mewtwo", "mew", "gengar",
+               "lugia", "rayquaza", "greninja", "gardevoir", "lucario", "snorlax", "dragonite", "gyarados",
+               "blastoise", "venusaur", "giratina", "dragapult", "ceruledge", "lillie", "iono", "marnie",
+               "cynthia", "n's", "vaporeon", "jolteon", "flareon", "leafeon", "glaceon", "tyranitar", "ditto"]
+
 def _mover_candidates():
-    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 20}).get("data", [])
-    sets = [x for x in sets if (x.get("total") or 0) >= 60 and "promo" not in x.get("name", "").lower()][:12]
-    out = []
-    for st in sets:
-        cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
+    """Popular cards from the last ~2 years worth $20+. Searches by name (works even when the
+    pokemontcg.io /sets endpoint is down)."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=730)).strftime("%Y/%m/%d")
+    seen, out = set(), []
+    for nm in MOVER_NAMES:
+        q = f'name:"{nm}*"' if " " in nm or "'" in nm else f"name:{nm}*"
+        cards = tcg_get("cards", {"q": q, "pageSize": 250,
                                   "select": "id,name,number,rarity,images,set,tcgplayer,cardmarket"}).get("data", [])
         for c in cards:
+            st = c.get("set") or {}
+            if c["id"] in seen or (st.get("releaseDate") or "") < cutoff or "promo" in (st.get("name") or "").lower():
+                continue
             m, v = best_market(c)
             img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
             if m >= MOVER_MIN_PRICE and img and is_popular(c):
+                seen.add(c["id"])
                 out.append({"card": c, "market": m, "variant": v, "img": img, "set": st})
     out.sort(key=lambda x: -x["market"])
     return out
