@@ -78,6 +78,31 @@ def google_image(query):
     return url
 
 
+def brave_image(query):
+    """Brave Search image API (repo secret BRAVE_API_KEY). Free monthly credit covers this bot's usage."""
+    key = os.getenv("BRAVE_API_KEY", "").strip()
+    if not key:
+        return None
+    ck = ("b", query)
+    if ck in _cache:
+        return _cache[ck]
+    url = None
+    try:
+        r = requests.get("https://api.search.brave.com/res/v1/images/search",
+                         params={"q": query, "count": 10, "safesearch": "strict"},
+                         headers={"X-Subscription-Token": key, "Accept": "application/json"}, timeout=20).json()
+        for it in r.get("results", []):
+            title = (it.get("title") or "") + " " + (it.get("url") or "")
+            img = (it.get("properties") or {}).get("url") or (it.get("thumbnail") or {}).get("src")
+            if img and _match(query, title) >= 0.5 and not img.lower().endswith(".svg"):
+                url = img
+                break
+    except Exception as e:
+        print(f"  Brave image search '{query}' failed: {e}")
+    _cache[ck] = url
+    return url
+
+
 def find(kind, set_name="", product="", name=""):
     """Best real photo URL for an item, or None. kind: packs | promo | playmat | coin | dice | sleeves |
     deckbox | binder | code | cards | figure"""
@@ -107,7 +132,11 @@ def find(kind, set_name="", product="", name=""):
              "code": "code card", "cards": "cards", "figure": f"{name} figure",
              "oversize": f"{name} oversize card", "display": "acrylic card display"}.get(kind, kind)
     q = f"{product or set_name} {label}".strip()
-    url = google_image(q)
+    url = google_image(q)             # Google's API is closed to new accounts - kept in case yours works
     if url:
         print(f"  picture '{q}': Google image")
+        return url
+    url = brave_image(q)
+    if url:
+        print(f"  picture '{q}': Brave image search")
     return url
