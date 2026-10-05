@@ -1285,6 +1285,64 @@ def second_account():
         return None
     return (GRAPH, user_id, token, "second account (@pokepulse.io)")
 
+def facebook_page():
+    """Facebook Page to cross-post Reels to. Uses FB_PAGE_TOKEN (falls back to the IG tokens,
+    which are Page tokens from the Facebook-login setup). FB_PAGE_ID optional - auto-detected."""
+    token = (os.getenv("FB_PAGE_TOKEN") or os.getenv("IG_TOKEN_2") or os.getenv("IG_ACCESS_TOKEN") or "").strip()
+    page_id = os.getenv("FB_PAGE_ID", "").strip()
+    if not token or os.getenv("FB_POST", "on").strip().lower() == "off":
+        return None
+    try:
+        if page_id:
+            # if this is a user token, swap it for the Page's own token
+            r = requests.get(f"{GRAPH}/{page_id}", params={"fields": "access_token,name", "access_token": token}, timeout=30).json()
+            if r.get("access_token"):
+                token = r["access_token"]
+            return page_id, token, r.get("name", page_id)
+        r = requests.get(f"{GRAPH}/me/accounts", params={"fields": "id,name,access_token", "access_token": token}, timeout=30).json()
+        if r.get("data"):
+            pg = r["data"][0]
+            return pg["id"], pg["access_token"], pg.get("name", pg["id"])
+        me = requests.get(f"{GRAPH}/me", params={"fields": "id,name", "access_token": token}, timeout=30).json()
+        if me.get("id"):
+            return me["id"], token, me.get("name", me["id"])
+        print("Facebook: could not find a Page for this token:", me)
+    except Exception as e:
+        print("Facebook page lookup failed:", e)
+    return None
+
+def publish_to_facebook(video_url, caption):
+    pg = facebook_page()
+    if not pg:
+        print("Facebook Page not configured - skipping FB.")
+        return False
+    page_id, token, name = pg
+    print(f"\n===== Posting Reel to Facebook Page ({name}) =====")
+    try:
+        start = requests.post(f"{GRAPH}/{page_id}/video_reels",
+                              data={"upload_phase": "start", "access_token": token}, timeout=60).json()
+        vid = start.get("video_id")
+        if vid:
+            up = requests.post(f"https://rupload.facebook.com/video-upload/v21.0/{vid}",
+                               headers={"Authorization": f"OAuth {token}", "file_url": video_url}, timeout=300).json()
+            print("FB upload:", up)
+            fin = requests.post(f"{GRAPH}/{page_id}/video_reels", data={
+                "upload_phase": "finish", "video_id": vid, "video_state": "PUBLISHED",
+                "description": caption, "access_token": token}, timeout=60).json()
+            print("FB Reel publish:", fin)
+            if fin.get("success"):
+                return True
+        else:
+            print("FB Reels start error:", start)
+        # fallback: regular Page video post
+        res = requests.post(f"{GRAPH}/{page_id}/videos", data={
+            "file_url": video_url, "description": caption, "access_token": token}, timeout=300).json()
+        print("FB video post:", res)
+        return "id" in res
+    except Exception as e:
+        print("Facebook post failed:", e)
+        return False
+
 def publish_content(video_url, caption, cover_url=None):
     accounts = []
     token1 = os.getenv("IG_ACCESS_TOKEN", "").strip()
@@ -1302,6 +1360,8 @@ def publish_content(video_url, caption, cover_url=None):
             print(f"{label} failed: {e}")
             ok = False
         any_ok = any_ok or ok
+    if publish_to_facebook(video_url, caption):
+        any_ok = True
     return any_ok
 
 if __name__ == "__main__":
