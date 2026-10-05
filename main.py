@@ -777,6 +777,165 @@ def build_chase_story(captions):
     return None
 
 
+# ---------------------------------------------------------------- card of the day (biggest daily price move)
+
+UA_HDR = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36"}
+SNAPSHOT_FILE = "price_snapshot.json"
+MOVER_MIN_PRICE = 20.0      # only cards worth real money
+MOVER_MIN_DOLLARS = 2.0     # ignore tiny moves
+
+def _tcgplayer_product_id(card):
+    url = (card.get("tcgplayer") or {}).get("url")
+    if not url:
+        return None
+    try:
+        r = requests.get(url, headers=UA_HDR, timeout=15, allow_redirects=True, stream=True)
+        r.close()
+        m = re.search(r"/product/(\d+)", r.url)
+        return int(m.group(1)) if m else None
+    except Exception:
+        return None
+
+def _tcgplayer_daily_change(pid):
+    """(previous day market, latest market, latest date) from TCGplayer's price history, or None."""
+    try:
+        j = requests.get(f"https://infinite-api.tcgplayer.com/price/history/{pid}/detailed",
+                         params={"range": "month"}, headers=UA_HDR, timeout=15).json()
+    except Exception:
+        return None
+    best = None
+    for res in j.get("result") or []:
+        if (res.get("condition") or "Near Mint") != "Near Mint":
+            continue
+        pts = []
+        for b in res.get("buckets") or []:
+            try:
+                mp = float(b.get("marketPrice") or 0)
+            except Exception:
+                mp = 0
+            if mp > 0 and b.get("bucketStartDate"):
+                pts.append((b["bucketStartDate"], mp))
+        pts.sort()
+        if len(pts) >= 2:
+            sold = float(res.get("averageDailyQuantitySold") or 0)
+            if best is None or sold > best[0]:
+                best = (sold, pts[-2][1], pts[-1][1], pts[-1][0])
+    return best[1:] if best else None
+
+def _mover_candidates():
+    sets = tcg_get("sets", {"orderBy": "-releaseDate", "pageSize": 20}).get("data", [])
+    sets = [x for x in sets if (x.get("total") or 0) >= 60 and "promo" not in x.get("name", "").lower()][:12]
+    out = []
+    for st in sets:
+        cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
+                                  "select": "id,name,number,rarity,images,set,tcgplayer,cardmarket"}).get("data", [])
+        for c in cards:
+            m, v = best_market(c)
+            img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
+            if m >= MOVER_MIN_PRICE and img and is_popular(c):
+                out.append({"card": c, "market": m, "variant": v, "img": img, "set": st})
+    out.sort(key=lambda x: -x["market"])
+    return out
+
+def build_mover_story(captions):
+    """Card of the Day: the popular card whose TCGplayer market price moved the most in the last day."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    nice = datetime.now(timezone.utc).strftime("%b %-d, %Y")
+    key = f"card of the day ({nice})".lower()
+    if any(key in c for c in captions):
+        print("Card of the Day already posted today")
+        return None
+    cands = _mover_candidates()
+    print(f"Card of the Day: {len(cands)} popular cards worth ${MOVER_MIN_PRICE:.0f}+")
+    if not cands:
+        return None
+
+    # 1) our own snapshot from the last run (yesterday) -> today's prices
+    snap = {}
+    if os.path.exists(SNAPSHOT_FILE):
+        try:
+            snap = json.load(open(SNAPSHOT_FILE))
+        except Exception:
+            snap = {}
+    prev_days = sorted(d for d in snap if d < today)
+    prev = snap.get(prev_days[-1], {}) if prev_days else {}
+    snap[today] = {x["card"]["id"]: round(x["market"], 2) for x in cands}
+    for d in sorted(snap)[:-7]:
+        snap.pop(d, None)
+    try:
+        json.dump(snap, open(SNAPSHOT_FILE, "w"))
+    except Exception as e:
+        print("Couldn't save price snapshot:", e)
+
+    moves = []
+    if prev:
+        yday = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+        since = "since yesterday" if prev_days[-1] == yday else \
+            "since " + datetime.strptime(prev_days[-1], "%Y-%m-%d").strftime("%b %-d")
+        for x in cands:
+            old = prev.get(x["card"]["id"])
+            if old and abs(x["market"] - old) >= MOVER_MIN_DOLLARS:
+                moves.append((abs(x["market"] / old - 1), old, x["market"], x, since))
+        print(f"Snapshot compare vs {prev_days[-1]}: {len(moves)} real moves")
+
+    # 2) no snapshot yet -> TCGplayer's own daily price history for the top cards
+    if not moves:
+        for x in cands[:40]:
+            pid = _tcgplayer_product_id(x["card"])
+            ch = _tcgplayer_daily_change(pid) if pid else None
+            if ch:
+                old, new, _d = ch
+                if abs(new - old) >= MOVER_MIN_DOLLARS:
+                    moves.append((abs(new / old - 1), old, new, x, "in the last day"))
+            time.sleep(0.3)
+        print(f"TCGplayer history: {len(moves)} real moves")
+    if not moves:
+        print("No daily price data yet - Card of the Day starts once there's a day of history")
+        return None
+
+    moves.sort(key=lambda t: -t[0])
+    pct, old, new, x, when = moves[0]
+    c, st = x["card"], x["set"]
+    up = new > old
+    arrow = "UP" if up else "DOWN"
+    pct100 = pct * 100
+    logo = (st.get("images") or {}).get("logo") or x["img"]
+    variant = VARIANT_NAMES.get(x["variant"], "")
+    name_full = f"{c['name']} {variant}".strip()
+    scenes = [
+        {"tag": "CARD OF THE DAY", "img_url": x["img"], "text": "THE CARD THAT MOVED THE MOST TODAY",
+         "colors": [YELLOW, WHITE],
+         "say": "Here's the Pokemon card that moved the most today!"},
+        {"tag": st["name"].upper(), "img_url": logo, "imgs": [logo, x["img"]],
+         "text": f"{c['name'].upper()} FROM {st['name'].upper()}", "colors": [WHITE],
+         "say": f"It's {c['name']} from {st['name']}!"},
+        {"tag": f"{arrow} {pct100:.0f}%", "img_url": x["img"], "text": f"{arrow} {pct100:.0f}% {when.upper()}",
+         "colors": [GREEN if up else RED, WHITE], "sub": f"${old:,.2f} -> ${new:,.2f}", "sub_size": 110,
+         "prices": price_info(c, x["variant"], new),
+         "say": f"It went {'up' if up else 'down'} {pct100:.0f} percent, from {say_dollars(old)} to {say_dollars(new)}!"},
+    ]
+    if len(moves) > 1:
+        p2, o2, n2, x2, _w = moves[1]
+        u2 = n2 > o2
+        scenes.append({"tag": "ALSO MOVING", "img_url": x2["img"], "text": x2["card"]["name"].upper(),
+                       "colors": [WHITE], "sub": f"{'UP' if u2 else 'DOWN'} {p2*100:.0f}%  •  ${n2:,.2f}", "sub_size": 110,
+                       "say": f"Also moving, {x2['card']['name']}, {'up' if u2 else 'down'} {p2*100:.0f} percent!"})
+    cap = [f"📈 Card of the Day ({nice}): {name_full} from {st['name']}",
+           "",
+           f"{'Up' if up else 'Down'} {pct100:.0f}% {when}: ${old:,.2f} -> ${new:,.2f} (TCGplayer market price).",
+           ""]
+    if len(moves) > 1:
+        cap += [f"Also moving: {moves[1][3]['card']['name']} ({moves[1][3]['set']['name']}) "
+                f"{'up' if moves[1][2] > moves[1][1] else 'down'} {moves[1][0]*100:.0f}% to ${moves[1][2]:,.2f}", ""]
+    cap += ["Prices move daily - not financial advice.", "",
+            "Buying or selling at these prices? 👇", "",
+            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+            "#PokemonCards #PokemonTCG #CardStax #PokemonInvesting #PokePulse #CardOfTheDay"]
+    print(f"Card of the Day: {name_full} ({st['name']}) {arrow} {pct100:.1f}% ${old:.2f} -> ${new:.2f}")
+    return {"story_id": f"mover {c['id']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap),
+            "topic": "mover"}
+
+
 # ---------------------------------------------------------------- extra images
 
 _POKEMON_NAMES = None
@@ -843,7 +1002,7 @@ def vary_images(story, art):
 
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["drops", "sales", "inside", "chase"]   # news + bulk removed; chase only when run by hand
+TOPICS = ["drops", "sales", "inside", "chase", "mover"]   # news + bulk removed; chase only when run by hand
 
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
@@ -856,7 +1015,7 @@ def topic_for_now():
     if 15 <= h <= 17:
         return "drops"     # 12:30pm ET - Drops
     if 18 <= h <= 20:
-        return "inside"    # 3:30pm ET  - What's Inside
+        return "mover"     # 3:30pm ET  - Card of the Day (biggest price move)
     if 21 <= h <= 22:
         return "sales"     # 5:30pm ET  - Sales
     if h == 23 or h == 0:
@@ -876,6 +1035,15 @@ def build_story():
 
     for topic in order:
         print(f"--- Trying topic: {topic}")
+        if topic == "mover":
+            try:
+                story = build_mover_story(captions)
+            except Exception as e:
+                print("Card of the Day failed:", e)
+                story = None
+            if story:
+                return story
+            continue
         if topic in ("bulk", "chase"):
             story = build_bulk_story(captions) if topic == "bulk" else build_chase_story(captions)
             if story:

@@ -180,6 +180,10 @@ def gemini_models(key):
 
 
 def build_script(story):
+    # Card of the Day: exact numbers - use the written lines, never an AI rewrite
+    if story.get("topic") == "mover" and all(sc.get("say") for sc in story["scenes"]):
+        return [{"say": sc["say"], "screen": _shorten(sc["text"], 7).rstrip(".").upper()}
+                for sc in story["scenes"]]
     script = ai_script(story)
     if script:
         return script
