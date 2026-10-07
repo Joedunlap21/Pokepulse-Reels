@@ -28,9 +28,14 @@ from main import W, H, BG, YELLOW, WHITE, GREEN, RED, get_font, text_w, load_ima
 VOICES = ["en-US-AndrewMultilingualNeural", "en-US-BrianMultilingualNeural",
           "en-US-AvaMultilingualNeural", "en-US-EmmaMultilingualNeural",
           "en-US-ChristopherNeural", "en-US-SteffanNeural", "en-GB-RyanNeural", "en-AU-WilliamNeural"]
-VOICE = os.getenv("REEL_VOICE", "").strip() or "en-US-AndrewMultilingualNeural"
+FEMALE_VOICES = ["en-US-AvaMultilingualNeural", "en-US-EmmaMultilingualNeural"]
+# Female voiceover only. A male voice set in the REEL_VOICE repo variable is ignored.
+VOICE = os.getenv("REEL_VOICE", "").strip() or "en-US-AvaMultilingualNeural"
 if VOICE == "random":
-    VOICE = random.choice(VOICES[:4])
+    VOICE = random.choice(FEMALE_VOICES)
+if VOICE not in FEMALE_VOICES and os.getenv("ALLOW_MALE_VOICE", "").strip().lower() not in ("1", "true", "yes"):
+    print(f"Voice {VOICE} is not a female voice - using en-US-AvaMultilingualNeural")
+    VOICE = "en-US-AvaMultilingualNeural"
 VOICE_RATE = os.getenv("REEL_VOICE_RATE", "").strip() or "+23%"
 VOICE_PITCH = os.getenv("REEL_VOICE_PITCH", "").strip() or "+6Hz"   # slightly higher = more upbeat
 # auto = voiceover on 2 runs a day (the 9:30am + 5:30pm ET posts), whatever the topic. on / off force it.
