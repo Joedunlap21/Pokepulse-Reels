@@ -387,7 +387,7 @@ def article_caption(art, sents, lead="🚨"):
         text = (text + " " + s).strip()
     return (f"{lead} {art['title']}\n\n{text}\n\nSource: {art['source']}\n\n"
             f"What are your thoughts on this? Drop your reaction below! 👇\n\n"
-            f"📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!\n\n"
+            f"📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe\n\n"
             f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews")
 
 # ---------------------------------------------------------------- topic: drops
@@ -432,7 +432,7 @@ def build_drop_story(art):
         lines.append("🎁 Inside: " + inside[0])
     lines += ["", f"Source: {art['source']}", "",
               "Which one are you grabbing? 👇", "",
-              "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+              "📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe", "",
               "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
             "caption_full": "\n".join(lines)}
@@ -480,7 +480,7 @@ def build_inside_story(art):
         lines.append("💲 Price: " + " ".join(price[:2]))
     lines += ["", f"Source: {art['source']}", "",
               "Are you picking this one up? 👇", "",
-              "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+              "📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe", "",
               "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
             "caption_full": "\n".join(lines)}
@@ -581,7 +581,7 @@ def build_gallery_inside_story(captions, posted):
     cap = [f"📦 WHAT'S INSIDE: {p['title']}", "", "Inside the box:"] + [f"• {x}" for x in p["items"]] + \
           ["", f"📅 Launches {p['launch'].strftime('%B %d, %Y')}", "", "Source: Pokemon.com", "",
            "Are you picking this one up? 👇", "",
-           "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+           "📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe", "",
            "#PokemonCards #PokemonTCG #CardStax #PokemonRestock #PokePulse #PokemonNews"]
     # set logo + the set's top popular chase cards (real TCGplayer prices) for extra frames
     logo_url, chase, chase_txt = None, [], ""
@@ -726,7 +726,7 @@ def build_bulk_story(captions):
             cap.append(f"{rank}. {c['name']} #{c['number']} ({c.get('rarity','')}{', ' + vname.title() if vname else ''}) - ${m:,.2f}")
         cap += ["", f"Prices: TCGplayer market price{(' updated ' + updated) if updated else ''}. Prices move daily.", "",
                 "Check your bulk and tell us what you found 👇", "",
-                "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+                "📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe", "",
                 "#PokemonCards #PokemonTCG #CardStax #PokemonBulk #PokePulse #PokemonInvesting"]
         return {"story_id": f"bulk {st['name']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap)}
     return None
@@ -771,7 +771,7 @@ def build_chase_story(captions):
             cap.append(f"{i}. {c['name']} #{c['number']} ({c.get('rarity','')}) - ${m:,.2f}")
         cap += ["", f"Prices: TCGplayer market price{(' updated ' + updated) if updated else ''}. Prices move daily.", "",
                 "Which one are you chasing? 👇", "",
-                "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+                "📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe", "",
                 "#PokemonCards #PokemonTCG #CardStax #PokemonInvesting #PokePulse #ChaseCards"]
         return {"story_id": f"chase {st['name']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap)}
     return None
@@ -940,7 +940,7 @@ def build_mover_story(captions):
                 f"{'up' if moves[1][2] > moves[1][1] else 'down'} {moves[1][0]*100:.0f}% to ${moves[1][2]:,.2f}", ""]
     cap += ["Prices move daily - not financial advice.", "",
             "Buying or selling at these prices? 👇", "",
-            "📬 Free Weekly Pokémon Market & Restock Reports -> Link in Bio!", "",
+            "📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe", "",
             "#PokemonCards #PokemonTCG #CardStax #PokemonInvesting #PokePulse #CardOfTheDay"]
     print(f"Card of the Day: {name_full} ({st['name']}) {arrow} {pct100:.1f}% ${old:.2f} -> ${new:.2f}")
     return {"story_id": f"mover {c['id']}", "key": key, "scenes": scenes, "caption_full": "\n".join(cap),
@@ -1321,19 +1321,29 @@ def make_cover(story, out_path="cover.jpg"):
     base.convert("RGB").save(out_path, quality=92)
     return out_path
 
+CTA_FILES = ["cta_1.png", "cta_2.png"]   # newsletter CTA end slides (in the repo) - one is picked at random each reel
+
+def pick_cta_image():
+    files = [f for f in CTA_FILES if os.path.exists(f)]
+    random.shuffle(files)
+    for f in files:
+        try:
+            im = Image.open(f)
+            im.load()
+            print(f"CTA slide: {f}")
+            return im.convert("RGB")
+        except Exception as e:
+            print(f"CTA {f} failed: {e}")
+    return None
+
 def make_cta_slide(out_path="f_cta.png"):
-    cta_url = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"
     base = Image.new("RGB", (W, H), BG)
-    cta_img = load_image(cta_url)
+    cta_img = pick_cta_image()
     if cta_img is not None:
-        cta_img.thumbnail((1080, 1350), Image.Resampling.LANCZOS)
-        base.paste(cta_img, ((W - cta_img.width) // 2, 160))
-    draw = ImageDraw.Draw(base)
-    draw.rounded_rectangle([80, 1620, W - 80, 1730], radius=55, fill=YELLOW, outline=WHITE, width=3)
-    label = "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER"
-    c_font = get_font(52)
-    draw.text(((W - text_w(draw, label, c_font)) // 2, 1644), label, font=c_font, fill="#000000")
+        cta_img = cta_img.resize((W, round(cta_img.height * W / cta_img.width)), Image.Resampling.LANCZOS)
+        base.paste(cta_img, (0, (H - cta_img.height) // 2))
     base.save(out_path)
+    return out_path
 
 def render_motion_clip(bg_path, txt_path, dur, out_vid, zoom_in=True):
     """Slow Ken Burns zoom on the art + text fading in on top."""

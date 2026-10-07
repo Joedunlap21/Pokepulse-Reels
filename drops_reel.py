@@ -870,61 +870,10 @@ def inside_visuals(line, i, prods, cards, date_png, prod_i, msrp=None, art=None)
     return out
 
 
-CTA_SRC = "https://i.ibb.co/WpYzjR5T/Carousel-CTA-Slide-2.png"   # 3375x4221 - slow host, often times out
-CTA_CLOUD_ID = "pokepulse_assets/newsletter_cta"
-
-
-def cta_image():
-    """Newsletter CTA art. Cached once in your Cloudinary (fast) so the end slide is never blank."""
-    try:
-        import cloudinary
-        import cloudinary.uploader
-        cloud = cloudinary.config().cloud_name
-        if cloud:
-            u = f"https://res.cloudinary.com/{cloud}/image/upload/w_1080/{CTA_CLOUD_ID}.png"
-            r = requests.get(u, timeout=30)
-            if r.status_code == 200 and len(r.content) > 10000:
-                im = Image.open(__import__("io").BytesIO(r.content))
-                im.load()
-                return im.convert("RGB")
-    except Exception as e:
-        print(f"CTA cache miss ({e})")
-    for attempt in range(3):
-        try:
-            r = requests.get(CTA_SRC, headers={"User-Agent": "Mozilla/5.0"}, timeout=120)
-            im = Image.open(__import__("io").BytesIO(r.content))
-            im.load()
-            im = im.convert("RGB")
-            im.thumbnail((1080, 1350), Image.LANCZOS)
-            try:                                       # save a fast copy for next time
-                import cloudinary.uploader
-                tmp = os.path.join(tempfile.gettempdir(), "cta_upload.png")
-                im.save(tmp)
-                cloudinary.uploader.upload(tmp, public_id=CTA_CLOUD_ID, overwrite=True)
-                print("CTA art cached to Cloudinary")
-            except Exception as e:
-                print(f"CTA cache upload failed ({e})")
-            return im
-        except Exception as e:
-            print(f"CTA download attempt {attempt + 1} failed: {e}")
-    return None
-
-
 def make_cta(out_path="f_cta.png"):
-    """Same layout as main.make_cta_slide, but with a reliable image download."""
-    from main import BG, YELLOW as M_YELLOW, get_font, text_w
-    base = Image.new("RGB", (W, H), BG)
-    im = cta_image()
-    if im is not None:
-        im.thumbnail((1080, 1350), Image.LANCZOS)
-        base.paste(im, ((W - im.width) // 2, 160))
-    d = ImageDraw.Draw(base)
-    d.rounded_rectangle([80, 1620, W - 80, 1730], radius=55, fill=M_YELLOW, outline="#FFFFFF", width=3)
-    label = "JOIN FREE WEEKLY POKÉPULSE NEWSLETTER"
-    f = get_font(52)
-    d.text(((W - text_w(d, label, f)) // 2, 1644), label, font=f, fill="#000000")
-    base.save(out_path)
-    return out_path
+    """Newsletter CTA end slide - same as main.make_cta_slide (random pick of cta_1.png / cta_2.png in the repo)."""
+    from main import make_cta_slide
+    return make_cta_slide(out_path)
 
 
 BG_EXT = (".mp4", ".mov", ".m4v", ".jpg", ".jpeg", ".png", ".webp")
