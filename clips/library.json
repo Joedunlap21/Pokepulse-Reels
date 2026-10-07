@@ -1,0 +1,16 @@
+{
+ "_about": "Stock backgrounds the bot downloads on demand (free licenses: Pixabay, Pexels, Unsplash). 'keywords' (case-sensitive, so 'Target' the store, not 'target price') = used when the post mentions that store. No keywords = general Pokemon background for any drop/what's-inside reel. Your own files in clips/ still win when their file name matches the post.",
+ "clips": [
+  {"file": "lib_target_1.jpg", "keywords": ["Target"], "url": "https://images.unsplash.com/photo-1681771969482-cf2e4907889f?w=1600&q=85&fm=jpg"},
+  {"file": "lib_target_2.jpg", "keywords": ["Target"], "url": "https://images.unsplash.com/photo-1619496140817-ccc97b892d0b?w=1600&q=85&fm=jpg"},
+  {"file": "lib_target_3.jpg", "keywords": ["Target"], "url": "https://images.unsplash.com/photo-1741992556911-f04553890e36?w=1600&q=85&fm=jpg"},
+  {"file": "lib_target_4.jpg", "keywords": ["Target"], "url": "https://images.unsplash.com/photo-1742037770612-2a3c1699c766?w=1600&q=85&fm=jpg"},
+  {"file": "lib_walmart_1.mp4", "keywords": ["Walmart"], "url": "https://videos.pexels.com/video-files/32535754/13875043_1440_2560_24fps.mp4"},
+  {"file": "lib_walmart_2.jpg", "keywords": ["Walmart"], "url": "https://images.unsplash.com/photo-1708484061139-6a6a8daacccc?w=1600&q=85&fm=jpg"},
+  {"file": "lib_bestbuy_1.jpg", "keywords": ["Best Buy", "BestBuy"], "url": "https://images.unsplash.com/photo-1744498194280-5fc2f3e816c1?w=1600&q=85&fm=jpg"},
+  {"file": "lib_pokeball_spin.mp4", "keywords": [], "url": "https://cdn.pixabay.com/video/2016/08/25/4800-180289993_large.mp4"},
+  {"file": "lib_pokeball_planet.mp4", "keywords": [], "url": "https://cdn.pixabay.com/video/2016/08/25/4802-180289995_large.mp4"},
+  {"file": "lib_pokemon_red.mp4", "keywords": [], "url": "https://cdn.pixabay.com/video/2016/08/16/4510-179376463_large.mp4"},
+  {"file": "lib_pokemon_ar.mp4", "keywords": [], "url": "https://cdn.pixabay.com/video/2016/08/27/4817-180570037_large.mp4"}
+ ]
+}
