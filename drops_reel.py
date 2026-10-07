@@ -879,16 +879,71 @@ def make_cta(out_path="f_cta.png"):
 BG_EXT = (".mp4", ".mov", ".m4v", ".jpg", ".jpeg", ".png", ".webp")
 
 
+LIBRARY_FILE = os.path.join("clips", "library.json")
+
+
+def _library():
+    try:
+        with open(LIBRARY_FILE) as fh:
+            return json.load(fh).get("clips", [])
+    except Exception as e:
+        print(f"Clip library not loaded ({e})")
+        return []
+
+
+def _fetch_library_clip(entry):
+    """Download a library clip into clips/ (once per run). Returns the local path or None."""
+    path = os.path.join("clips", entry["file"])
+    if os.path.exists(path) and os.path.getsize(path) > 20_000:
+        return path
+    try:
+        r = requests.get(entry["url"], headers={"User-Agent": "Mozilla/5.0"}, timeout=90)
+        if r.status_code == 200 and len(r.content) > 20_000:
+            with open(path, "wb") as fh:
+                fh.write(r.content)
+            return path
+        print(f"Library clip {entry['file']}: HTTP {r.status_code}, {len(r.content)} bytes")
+    except Exception as e:
+        print(f"Library clip {entry['file']} failed ({e})")
+    return None
+
+
+def library_background(text, general=False):
+    """Store clip when the post names Target / Walmart / Best Buy (case-sensitive), else (general=True) a Pokemon clip."""
+    lib = _library()
+    if general:
+        pool = [e for e in lib if not e.get("keywords")]
+    else:
+        hits = {}
+        for e in lib:
+            n = sum(1 for k in e.get("keywords", []) if re.search(r"\b" + re.escape(k) + r"\b", text))
+            if n:
+                hits.setdefault(e["keywords"][0], []).append(e)
+        if not hits:
+            return None
+        # the store mentioned first in the post wins
+        store = min(hits, key=lambda k: text.find(k) if text.find(k) >= 0 else 10**9)
+        pool = hits[store]
+    random.shuffle(pool)
+    for e in pool:
+        got = _fetch_library_clip(e)
+        if got:
+            print(f"Background: library {'Pokemon clip' if general else 'store clip'} {got}")
+            return got
+    return None
+
+
 def pick_own_background(story, source):
     """Pick a video/photo from clips/ whose FILE NAME matches the post.
     e.g. target_restock.mp4 -> used when the post mentions Target;  30th_celebration_packs.jpg -> 30th posts.
     Files named general_*.mp4 / .jpg can be used for any post."""
     files = [os.path.join("clips", f) for f in (os.listdir("clips") if os.path.isdir("clips") else [])
-             if f.lower().endswith(BG_EXT) and os.path.getsize(os.path.join("clips", f)) > 20_000]
+             if f.lower().endswith(BG_EXT) and not f.startswith("lib_")
+             and os.path.getsize(os.path.join("clips", f)) > 20_000]
+    raw = " ".join([source, story.get("product_name", ""), story.get("set_name", ""), story.get("topic", "")])
+    text = _norm(raw)
     if not files:
-        return None
-    text = _norm(" ".join([source, story.get("product_name", ""), story.get("set_name", ""),
-                           story.get("topic", "")]))
+        return library_background(raw) or library_background(raw, general=True)
     def score(path):
         words = [w for w in re.split(r"[^a-z0-9]+", os.path.splitext(os.path.basename(path))[0].lower())
                  if len(w) > 2 and w not in ("general", "clip", "video", "img", "image", "bg", "background")]
@@ -898,12 +953,15 @@ def pick_own_background(story, source):
     if best[0] > 0:
         print(f"Background: your file {best[2]} (matches the post)")
         return best[2]
+    store = library_background(raw)
+    if store:
+        return store
     general = [f for f in files if os.path.basename(f).lower().startswith("general")]
     if general:
         pick = random.choice(general)
         print(f"Background: your general file {pick}")
         return pick
-    return None
+    return library_background(text, general=True)
 
 
 def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
