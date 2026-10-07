@@ -1021,17 +1021,19 @@ def topic_for_now():
         return forced
     h = datetime.now(timezone.utc).hour
     # 6 reels a day (times ET during daylight time). Ranges allow for GitHub's late starts.
-    if 12 <= h <= 14:
-        return "inside"    # 9:30am ET  - Upcoming Drop: What's Inside
-    if 15 <= h <= 17:
-        return "drops"     # 12:30pm ET - Drops
+    if 9 <= h <= 12:
+        return "drops"     # 6:30am ET  - Drops (morning restock alert)
+    if 14 <= h <= 17:
+        return "inside"    # 11:30am ET - Upcoming Drop: What's Inside
     if 18 <= h <= 20:
         return "mover"     # 3:30pm ET  - Card of the Day (biggest price move)
     if 21 <= h <= 22:
         return "sales"     # 5:30pm ET  - Sales
-    if h == 23 or h == 0:
-        return "drops"     # 7:30pm ET  - Drops
-    return "inside"        # 9:30pm ET  - What's Inside
+    if h == 23 or h <= 1:
+        return "drops"     # 8:00pm ET  - Drops (prime time)
+    if 2 <= h <= 4:
+        return "inside"    # 10:00pm ET - What's Inside
+    return "drops"
 
 def build_story():
     posted = set()
