@@ -26,12 +26,9 @@ on:
         required: false
         default: false
         type: boolean
-   schedule:
-    # Times are UTC = 6:30am, 11:30am, 3:30pm, 5:30pm, 8:00pm, 10:00pm Eastern (daylight time).
-    # PokePulse-Agent- set Reels run in between (8:30am, 12:30pm, 7pm, 9pm) - keep 1h apart.
-    - cron: '30 10,15,19,21 * * *'
-    - cron: '0 0,2 * * *'
-    
+  # Started by the Google Apps Script timer (PokePulse Reels Timer) at 6:30am, 11:30am,
+  # 3:30pm, 5:30pm, 8pm, 10pm ET. GitHub's own schedule skipped too many runs, so it was removed.
+
 permissions:
   contents: read
 
