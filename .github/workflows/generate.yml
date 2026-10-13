@@ -26,12 +26,12 @@ on:
         required: false
         default: false
         type: boolean
-  schedule:
+   schedule:
     # Times are UTC = 6:30am, 11:30am, 3:30pm, 5:30pm, 8:00pm, 10:00pm Eastern (daylight time).
     # PokePulse-Agent- set Reels run in between (8:30am, 12:30pm, 7pm, 9pm) - keep 1h apart.
     - cron: '30 10,15,19,21 * * *'
     - cron: '0 0,2 * * *'
-
+    
 permissions:
   contents: read
 
