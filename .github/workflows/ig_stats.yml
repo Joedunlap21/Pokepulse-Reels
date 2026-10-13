@@ -1,0 +1,38 @@
+name: Instagram Stats Logger
+
+# Read-only. Logs followers + per-post numbers to stats/*.csv for the follower case study.
+# Started daily at 11:45pm ET by the Google Apps Script timer (runStats); can also run by hand.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Log stats
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+        run: |
+          pip install requests
+          python ig_stats.py
+
+      - name: Save to repo
+        run: |
+          git config user.name "pokepulse-stats"
+          git config user.email "actions@users.noreply.github.com"
+          git add stats/
+          git diff --cached --quiet && exit 0
+          git commit -m "Stats $(date -u +%F)"
+          git pull --rebase -q origin main
+          git push
