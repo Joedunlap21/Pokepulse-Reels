@@ -471,7 +471,7 @@ def ai_drop_script(story, source):
             "Write 5 or 6 lines, each 5-12 words:\n"
             "  1: the hook - the most surprising fact (a price, a record, a name)\n"
             "  middle: the key facts - WHICH card or product (say its name), the price, where, when\n"
-            "  last: a short question or 'Follow for more Pokemon news!' style ending\n"
+            "  last: ask viewers to comment and share, e.g. 'Would you pay that? Comment below and send this to a friend!'\n"
             "RULES: use ONLY facts from the source. Never invent names, prices, grades, dates or numbers. "
             "Never add details, feelings or actions the source doesn't state, and never merge two separate "
             "events from the source into one (if something happened at a different time, don't present it as "
@@ -490,7 +490,7 @@ def ai_drop_script(story, source):
         "Write 5 or 6 lines, each 5-13 words:\n"
         "  1: the hook, e.g. 'Huge drop alert for Pokemon collectors!' or 'Target just confirmed a huge Pokemon drop!'\n"
         "  middle: WHAT is dropping, WHERE (store names), WHEN (date), PRICE, WHAT'S INSIDE - only the ones in the source\n"
-        "  last: 'Follow so you never miss a drop!' style\n"
+        "  last: ask viewers to comment and share, e.g. 'Are you grabbing one? Comment below and tag your drop buddy!'\n"
         "RULES: use ONLY facts from the source. Never invent a store, date, price, quantity or product. "
         "Write prices exactly like the source with digits, e.g. $26.94. One price per line max. "
         "Name the store in the line when you talk about a store.\n"
@@ -543,7 +543,7 @@ def ai_inside_script(story, source, key):
         "'The big pull? Mega Charizard ex at $412!' - otherwise skip this line\n"
         "  next: release date (month + day, no year) and the MSRP if the source has one, "
         "e.g. 'Drops November 6 for $39.99!'\n"
-        "  5: 'Follow so you never miss a drop!' style\n"
+        "  5: ask viewers to comment and share, e.g. 'Would you open it or keep it sealed? Comment below and send this to a friend!'\n"
         "Never say 'Pokemon TCG' or the long official name inside a line - say 'booster packs', not "
         "'Pokemon TCG: 30th Celebration booster packs'.\n"
         "RULES: use ONLY facts from the source. Never invent contents, quantities, dates, prices or stores. "
@@ -603,7 +603,7 @@ def fallback_drop_script(story):
         if s["tag"] == "WHERE":
             txt = "Dropping at " + txt
         lines.append(_shorten(txt, 13))
-    lines.append("Follow so you never miss a drop!")
+    lines.append("Are you grabbing one? Comment below and send this to a friend!")
     return [l for l in lines if l][:7]
 
 

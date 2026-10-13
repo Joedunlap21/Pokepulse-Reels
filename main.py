@@ -999,7 +999,7 @@ def build_guess_story(captions):
                  "say": f"Here's a hint. It's {c['name']} from {st['name']}, {year}."},
                 {"tag": "THE ANSWER", "img_url": img, "text": f"${m:,.2f}", "colors": [YELLOW],
                  "sub": "TCGPLAYER MARKET PRICE", "sub_size": 90, "prices": price_info(c, v, m),
-                 "say": f"It's worth {say_dollars(m)}! Were you close? Comment your guess."},
+                 "say": f"It's worth {say_dollars(m)}! Comment your guess, and send this to a friend to see who was closer!"},
             ]
             cap = [f"🤔 Guess the Price: {c['name']} ({st['name']})", "",
                    "How much is this card worth? Comment your guess BEFORE the reveal 👇", "", ".", ".", ".", "",
@@ -1152,27 +1152,63 @@ def vary_images(story, art):
         sc["img_url"] = pool[i % len(pool)]
 
 # ---------------------------------------------------------------- caption finisher
-# Follower case study (Week 1): every caption ends with a follow reason + the
-# newsletter, placed just above the hashtags so it shows before "...more" cuts it.
+# Follower case study: every caption asks for a COMMENT (one easy, specific answer),
+# a SHARE (who to send it to) and the follow, placed above the hashtags.
 
+ENGAGE = {   # topic: (comment ask, share ask, spoken ask added to the end of the voiceover)
+    "drops":  ("Are you hunting this one? Comment 🔥 for yes or 🧊 for skip 👇",
+               "📲 Send this to the friend you hunt drops with",
+               "Are you grabbing one? Comment below and send this to a friend!"),
+    "inside": ("Worth the price? Comment YES or NO 👇",
+               "📲 Send this to whoever's splitting it with you",
+               "Worth it? Comment yes or no, and send this to a friend!"),
+    "mover":  ("Buying or selling at this price? Comment BUY or SELL 👇",
+               "📲 Send this to someone who owns this card",
+               "Buy or sell? Comment below, and send this to someone who owns it!"),
+    "guess":  ("Comment your guess BEFORE the reveal 👇",
+               "📲 Send this to a friend and see who guesses closer", None),
+    "binder": ("Got any of these? Comment the one you own 👇",
+               "📲 Send this to the friend with a shoebox full of old cards", None),
+    "chase":  ("Which one are you chasing? Comment 1, 2 or 3 👇",
+               "📲 Send this to your pack-ripping buddy",
+               "Which one are you chasing? Comment below and send this to a friend!"),
+    "sales":  ("Would you pay that? Comment YES or NO 👇",
+               "📲 Send this to the friend who needs to see this",
+               "Would you pay that? Comment below and send this to a friend!"),
+}
+DEFAULT_ENGAGE = ("What do you think? Comment below 👇", "📲 Send this to a friend who collects", None)
 FOLLOW_LINE = "🔔 Follow for daily Pokémon drop alerts, restocks & price moves"
 NEWSLETTER_LINE = "📬 Free Poké Pulse newsletter: link in bio"
 
-def finish_caption(cap):
+def add_spoken_ask(story):
+    """End the voiceover with a comment + share ask (formats whose lines are written in code)."""
+    ask = ENGAGE.get(story.get("topic"), DEFAULT_ENGAGE)[2]
+    scenes = story.get("scenes") or []
+    if ask and scenes and scenes[-1].get("say") and "comment" not in scenes[-1]["say"].lower():
+        scenes[-1]["say"] = scenes[-1]["say"].rstrip() + " " + ask
+
+def finish_caption(cap, topic=None):
     cap = (cap or "").rstrip()
+    comment, share, _ = ENGAGE.get(topic, DEFAULT_ENGAGE)
     lines = cap.split("\n")
     tag_at = len(lines)
     if lines and lines[-1].strip().startswith("#"):
         tag_at = len(lines) - 1
-    add = []
-    if "follow" not in cap.lower():
-        add.append(FOLLOW_LINE)
-    if "link in bio" not in cap.lower():
-        add.append(NEWSLETTER_LINE)
-    if not add:
-        return cap
     body = "\n".join(lines[:tag_at]).rstrip()
+    low = body.lower()
+    # drop the old generic question so there's one clear ask
+    if "👇" in body and comment.split("👇")[0].strip().lower() not in low:
+        body = "\n".join(l for l in body.split("\n") if "👇" not in l).rstrip()
+    add = []
+    if comment.split("👇")[0].strip().lower() not in body.lower():
+        add.append(comment)
+    add.append(share)
+    if "follow" not in body.lower():
+        add.append(FOLLOW_LINE)
+    if "link in bio" not in body.lower():
+        add.append(NEWSLETTER_LINE)
     tags = "\n".join(lines[tag_at:])
+    body = re.sub(r"\n{3,}", "\n\n", body)
     return body + "\n\n" + "\n".join(add) + ("\n\n" + tags if tags else "")
 
 # ---------------------------------------------------------------- topic picker
@@ -1763,6 +1799,7 @@ if __name__ == "__main__":
         print("Nothing new to post on any topic right now - skipping this run (nothing repeated).")
         sys.exit(0)
 
+    add_spoken_ask(story)
     print(f"Producing Reel: {story['story_id']}")
     mp4_file = None
     # Drops get the drop-alert format (drops_reel.py). Set repo variable DROPS_STYLE=classic to turn it off.
@@ -1828,6 +1865,6 @@ if __name__ == "__main__":
     video_cdn_url = upload_res.get("secure_url")
     print(f"CDN URL: {video_cdn_url}")
 
-    if publish_content(video_cdn_url, finish_caption(story["caption_full"]), cover_url):
+    if publish_content(video_cdn_url, finish_caption(story["caption_full"], story.get("topic")), cover_url):
         with open("posted_news.txt", "a") as f:
             f.write(story["key"] + "\n")
