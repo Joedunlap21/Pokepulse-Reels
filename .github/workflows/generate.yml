@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
         type: choice
-        options: ['', 'drops', 'sales', 'inside', 'chase', 'mover']
+        options: ['', 'drops', 'sales', 'inside', 'chase', 'mover', 'guess', 'binder']
       voice_mode:
         description: 'Voiceover: on = always (default), auto = only the 5:30pm post, off = music only'
         required: false
@@ -26,8 +26,8 @@ on:
         required: false
         default: false
         type: boolean
-  # Started by the Google Apps Script timer (PokePulse Reels Timer) at 6:30am, 11:30am,
-  # 3:30pm, 5:30pm, 8pm, 10pm ET. GitHub's own schedule skipped too many runs, so it was removed.
+  # Started by the Google Apps Script timer (PokePulse Reels Timer) at 8:30am, 11:30am,
+  # 3:30pm, 6pm, 8:30pm ET. GitHub's own schedule skipped too many runs, so it was removed.
 
 permissions:
   contents: read

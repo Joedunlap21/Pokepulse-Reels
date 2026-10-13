@@ -8,6 +8,8 @@ import glob
 import random
 import subprocess
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+ET = ZoneInfo("America/New_York")
 
 import cloudinary
 import cloudinary.uploader
@@ -947,6 +949,144 @@ def build_mover_story(captions):
             "topic": "mover"}
 
 
+# ---------------------------------------------------------------- price guess game + check your binder
+# Two evergreen formats so every post in a day is a different kind of Reel.
+
+GUESS_MIN_PRICE = 40.0    # guess-the-price card must be worth at least this
+BINDER_MIN_PRICE = 30.0   # every "check your binder" card must be worth at least this
+_ALL_SETS = None
+
+def all_sets():
+    global _ALL_SETS
+    if _ALL_SETS is None:
+        _ALL_SETS = tcg_get("sets", {"orderBy": "releaseDate", "pageSize": 250}).get("data", [])
+    return _ALL_SETS
+
+def _set_year(st):
+    return (st.get("releaseDate") or "")[:4]
+
+def _popular_priced_cards(st, min_price):
+    cards = tcg_get("cards", {"q": f'set.id:{st["id"]}', "pageSize": 250,
+                              "select": "id,name,number,rarity,images,set,tcgplayer,cardmarket"}).get("data", [])
+    out = []
+    for c in cards:
+        m, v = best_market(c)
+        img = (c.get("images") or {}).get("large") or (c.get("images") or {}).get("small")
+        if m >= min_price and img and is_popular(c):
+            out.append((m, v, c, img))
+    out.sort(key=lambda x: -x[0])
+    return out
+
+def build_guess_story(captions):
+    """Guess the Price: show a popular card, give a hint, reveal the TCGplayer market price."""
+    sets = [s for s in all_sets() if "promo" not in s.get("name", "").lower() and (s.get("total") or 0) >= 60]
+    rng = random.Random(datetime.now(timezone.utc).strftime("%Y-%m-%d") + "guess")
+    rng.shuffle(sets)
+    for st in sets[:12]:
+        for m, v, c, img in _popular_priced_cards(st, GUESS_MIN_PRICE)[:6]:
+            key = f"guess the price: {c['name']} ({st['name']})".lower()
+            if any(key in cap for cap in captions):
+                continue
+            year = _set_year(st)
+            rarity = (c.get("rarity") or "").upper()
+            updated = (c.get("tcgplayer") or {}).get("updatedAt", "")
+            scenes = [
+                {"tag": "GUESS THE PRICE", "img_url": img, "text": "HOW MUCH IS THIS CARD WORTH?",
+                 "colors": [YELLOW, WHITE],
+                 "say": "Guess the price of this card. Lock in your answer!"},
+                {"tag": "HINT", "img_url": img, "text": c["name"].upper(), "colors": [WHITE],
+                 "sub": f"{st['name'].upper()}  •  {year}" + (f"  •  {rarity}" if rarity else ""), "sub_size": 80,
+                 "say": f"Here's a hint. It's {c['name']} from {st['name']}, {year}."},
+                {"tag": "THE ANSWER", "img_url": img, "text": f"${m:,.2f}", "colors": [YELLOW],
+                 "sub": "TCGPLAYER MARKET PRICE", "sub_size": 90, "prices": price_info(c, v, m),
+                 "say": f"It's worth {say_dollars(m)}! Were you close? Comment your guess."},
+            ]
+            cap = [f"🤔 Guess the Price: {c['name']} ({st['name']})", "",
+                   "How much is this card worth? Comment your guess BEFORE the reveal 👇", "", ".", ".", ".", "",
+                   f"Answer: ${m:,.2f} (TCGplayer market price{(' updated ' + updated) if updated else ''}). "
+                   "Prices move daily.", "",
+                   "#PokemonCards #PokemonTCG #CardStax #PokemonInvesting #PokePulse #GuessThePrice"]
+            print(f"Guess the Price: {c['name']} ({st['name']}) ${m:,.2f}")
+            return {"story_id": f"guess {c['id']}", "key": key, "scenes": scenes,
+                    "caption_full": "\n".join(cap), "topic": "guess"}
+    return None
+
+def build_binder_story(captions):
+    """Check Your Binder: 3 popular cards from older sets (before 2017) worth real money now."""
+    old = [s for s in all_sets() if _set_year(s) and _set_year(s) < "2017"
+           and "promo" not in s.get("name", "").lower()]
+    rng = random.Random(datetime.now(timezone.utc).strftime("%Y-%m-%d") + "binder")
+    rng.shuffle(old)
+    picks, used_names = [], set()
+    for st in old[:20]:
+        for m, v, c, img in _popular_priced_cards(st, BINDER_MIN_PRICE):
+            base = c["name"].split()[0].lower()
+            if base in used_names or any(f"{c['name']} ({st['name']})".lower() in cap for cap in captions):
+                continue
+            picks.append((m, v, c, img, st))
+            used_names.add(base)
+            break
+        if len(picks) == 3:
+            break
+    if len(picks) < 3:
+        print("Check Your Binder: not 3 good vintage cards found")
+        return None
+    picks.sort(key=lambda x: x[0])            # count up: cheapest first, biggest last
+    key = "check your binder: " + ", ".join(f"{p[2]['name']} ({p[4]['name']})" for p in picks).lower()
+    scenes = [{"tag": "CHECK YOUR BINDER", "img_url": picks[-1][3], "text": "OLD CARDS YOU MIGHT ALREADY OWN",
+               "colors": [YELLOW, WHITE],
+               "say": "Check your binder! These old cards are worth real money now."}]
+    for i, (m, v, c, img, st) in enumerate(picks):
+        rank = len(picks) - i
+        year = _set_year(st)
+        scenes.append({"tag": f"#{rank}  •  {year}", "img_url": img, "text": c["name"].upper(), "colors": [WHITE],
+                       "sub": f"${m:,.2f} MARKET  •  {st['name'].upper()}", "sub_size": 90,
+                       "prices": price_info(c, v, m),
+                       "say": f"{c['name']} from {st['name']}, {year}. {say_dollars(m)}."})
+    cap = ["📚 Check Your Binder: old cards worth real money now", ""]
+    for m, v, c, img, st in reversed(picks):
+        cap.append(f"• {c['name']} ({st['name']}) {_set_year(st)} - ${m:,.2f}")
+    cap += ["", "TCGplayer market prices for the most valuable printing. Condition matters - prices move daily.", "",
+            "Got any of these in a shoebox? 👇", "",
+            "#PokemonCards #PokemonTCG #CardStax #VintagePokemon #PokePulse #CheckYourBinder"]
+    print("Check Your Binder: " + ", ".join(f"{p[2]['name']} ${p[0]:,.2f}" for p in picks))
+    return {"story_id": "binder " + "-".join(p[2]["id"] for p in picks), "key": key, "scenes": scenes,
+            "caption_full": "\n".join(cap), "topic": "binder"}
+
+
+# ---------------------------------------------------------------- one of each format per day
+
+FORMAT_MARKERS = {"drops": ["🛒 drop report", "🚨 drop", "restock"], "inside": ["📦 what's inside"],
+                  "mover": ["📈 card of the day"], "guess": ["🤔 guess the price"],
+                  "binder": ["📚 check your binder"], "chase": ["🔥 top chase cards"]}
+
+def formats_posted_today():
+    """Which Reel formats already went out today (Eastern time), from the account's own captions."""
+    token, uid = os.getenv("IG_ACCESS_TOKEN"), os.getenv("IG_USER_ID")
+    if not token or not uid:
+        return set()
+    try:
+        r = requests.get(f"{GRAPH}/{uid}/media", params={"fields": "caption,timestamp", "limit": 25,
+                                                          "access_token": token}, timeout=15).json()
+    except Exception:
+        return set()
+    et_today = datetime.now(ET).date()
+    done = set()
+    for m in r.get("data", []):
+        try:
+            ts = datetime.strptime(m["timestamp"][:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+        if ts.astimezone(ET).date() != et_today:
+            continue
+        cap = (m.get("caption") or "").lower()[:120]
+        for fmt, marks in FORMAT_MARKERS.items():
+            if any(mk in cap for mk in marks):
+                done.add(fmt)
+    print(f"Formats already posted today: {sorted(done) or 'none'}")
+    return done
+
+
 # ---------------------------------------------------------------- extra images
 
 _POKEMON_NAMES = None
@@ -1037,27 +1177,30 @@ def finish_caption(cap):
 
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["drops", "sales", "inside", "chase", "mover"]   # news + bulk removed; chase only when run by hand
+TOPICS = ["drops", "sales", "inside", "chase", "mover", "guess", "binder"]   # news + bulk removed
 
+# Daily lineup: 5 Reels from this bot + 1 set countdown from PokePulse-Agent- (1:30pm),
+# every one a DIFFERENT format. Started by the Google Apps Script timer.
+#   8:30am  drops   - Restock / drop alert
+#  11:30am  inside  - What's Inside an upcoming product
+#   1:30pm  (PokePulse-Agent- set countdown)
+#   3:30pm  mover   - Card of the Day (biggest price move)
+#   6:00pm  guess   - Guess the Price game
+#   8:30pm  binder  - Check Your Binder (old cards worth money)
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
     if forced in TOPICS:
         return forced
-    h = datetime.now(timezone.utc).hour
-    # 6 reels a day (times ET during daylight time). Ranges allow for GitHub's late starts.
-    if 9 <= h <= 12:
-        return "drops"     # 6:30am ET  - Drops (morning restock alert)
-    if 14 <= h <= 17:
-        return "inside"    # 11:30am ET - Upcoming Drop: What's Inside
-    if 18 <= h <= 20:
-        return "mover"     # 3:30pm ET  - Card of the Day (biggest price move)
-    if 21 <= h <= 22:
-        return "sales"     # 5:30pm ET  - Sales
-    if h == 23 or h <= 1:
-        return "drops"     # 8:00pm ET  - Drops (prime time)
-    if 2 <= h <= 4:
-        return "inside"    # 10:00pm ET - What's Inside
-    return "drops"
+    h = datetime.now(ET).hour
+    if 5 <= h <= 9:
+        return "drops"
+    if 10 <= h <= 13:
+        return "inside"
+    if 14 <= h <= 16:
+        return "mover"
+    if 17 <= h <= 19:
+        return "guess"
+    return "binder"
 
 def build_story():
     posted = set()
@@ -1066,8 +1209,12 @@ def build_story():
             posted = {l.strip().lower() for l in f if l.strip()}
     captions = recent_ig_captions()
     first = topic_for_now()
-    # News reels are OFF for good - only drops / what's inside / sales. Nothing new? Skip the post.
-    order = [first] + [t for t in ["inside", "drops", "sales"] if t != first]
+    # News reels are OFF for good. Never repeat a format the same day: if this slot's format already
+    # went out (or has nothing new), fall back to a format that hasn't been posted today.
+    done = formats_posted_today()
+    backups = ["inside", "drops", "sales", "binder", "guess", "mover"]
+    order = [t for t in [first] + backups if t not in done]
+    order = list(dict.fromkeys(order)) or [first]
     articles = None
 
     for topic in order:
@@ -1077,6 +1224,15 @@ def build_story():
                 story = build_mover_story(captions)
             except Exception as e:
                 print("Card of the Day failed:", e)
+                story = None
+            if story:
+                return story
+            continue
+        if topic in ("guess", "binder"):
+            try:
+                story = build_guess_story(captions) if topic == "guess" else build_binder_story(captions)
+            except Exception as e:
+                print(f"{topic} failed:", e)
                 story = None
             if story:
                 return story
