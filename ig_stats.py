@@ -15,6 +15,7 @@ GRAPH = "https://graph.facebook.com/v21.0"
 IG = os.environ["IG_USER_ID"]
 TOKEN = os.environ["IG_ACCESS_TOKEN"]
 os.makedirs("stats", exist_ok=True)
+ERRORS = []
 
 
 def get(path, **params):
@@ -42,6 +43,7 @@ def media_insights(mid, kind):
             bad = [m for m in wanted if m in msg]
             if not bad:
                 print(f"  insights failed for {mid} ({kind}): {msg}")
+                ERRORS.append(f"media {kind}: {msg}")
                 break
             wanted = [m for m in wanted if m not in bad]
     return out
@@ -65,6 +67,7 @@ def account_day_totals():
                 out[m] = tv.get("value")
         except RuntimeError as e:
             print(f"  account metric {m} unavailable: {e}")
+            ERRORS.append(f"account {m}: {e}")
     return out
 
 
@@ -101,6 +104,8 @@ def main():
         w = csv.DictWriter(f, fieldnames=mcols)
         w.writeheader()
         w.writerows(rows)
+    with open("stats/errors.txt", "w") as f:
+        f.write("\n".join(sorted(set(ERRORS))) or "none")
     print(f"Logged {len(rows)} posts. Account: {acct}")
 
 
