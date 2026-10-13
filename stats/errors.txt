@@ -1,0 +1,7 @@
+account accounts_engaged: (#10) Application does not have permission for this action
+account follows_and_unfollows: (#10) Application does not have permission for this action
+account profile_views: (#10) Application does not have permission for this action
+account reach: (#10) Application does not have permission for this action
+account views: (#10) Application does not have permission for this action
+media FEED: (#10) Application does not have permission for this action
+media REELS: (#10) Application does not have permission for this action
