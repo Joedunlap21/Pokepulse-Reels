@@ -1011,6 +1011,30 @@ def vary_images(story, art):
     for i, sc in enumerate(scenes):
         sc["img_url"] = pool[i % len(pool)]
 
+# ---------------------------------------------------------------- caption finisher
+# Follower case study (Week 1): every caption ends with a follow reason + the
+# newsletter, placed just above the hashtags so it shows before "...more" cuts it.
+
+FOLLOW_LINE = "🔔 Follow for daily Pokémon drop alerts, restocks & price moves"
+NEWSLETTER_LINE = "📬 Free Poké Pulse newsletter: link in bio"
+
+def finish_caption(cap):
+    cap = (cap or "").rstrip()
+    lines = cap.split("\n")
+    tag_at = len(lines)
+    if lines and lines[-1].strip().startswith("#"):
+        tag_at = len(lines) - 1
+    add = []
+    if "follow" not in cap.lower():
+        add.append(FOLLOW_LINE)
+    if "link in bio" not in cap.lower():
+        add.append(NEWSLETTER_LINE)
+    if not add:
+        return cap
+    body = "\n".join(lines[:tag_at]).rstrip()
+    tags = "\n".join(lines[tag_at:])
+    return body + "\n\n" + "\n".join(add) + ("\n\n" + tags if tags else "")
+
 # ---------------------------------------------------------------- topic picker
 
 TOPICS = ["drops", "sales", "inside", "chase", "mover"]   # news + bulk removed; chase only when run by hand
@@ -1648,6 +1672,6 @@ if __name__ == "__main__":
     video_cdn_url = upload_res.get("secure_url")
     print(f"CDN URL: {video_cdn_url}")
 
-    if publish_content(video_cdn_url, story["caption_full"], cover_url):
+    if publish_content(video_cdn_url, finish_caption(story["caption_full"]), cover_url):
         with open("posted_news.txt", "a") as f:
             f.write(story["key"] + "\n")
