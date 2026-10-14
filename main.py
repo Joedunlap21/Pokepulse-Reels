@@ -916,9 +916,10 @@ def build_mover_story(captions):
     variant = VARIANT_NAMES.get(x["variant"], "")
     name_full = f"{c['name']} {variant}".strip()
     scenes = [
-        {"tag": "CARD OF THE DAY", "img_url": x["img"], "text": "THE CARD THAT MOVED THE MOST TODAY",
-         "colors": [YELLOW, WHITE],
-         "say": "Here's the Pokemon card that moved the most today!"},
+        # first-second hook: the big % move is on screen immediately (case study wk1)
+        {"tag": "CARD OF THE DAY", "img_url": x["img"], "text": f"{arrow} {pct100:.0f}% {when.upper()}",
+         "colors": [GREEN if up else RED, WHITE],
+         "say": f"This Pokemon card just went {'up' if up else 'down'} {pct100:.0f} percent!"},
         {"tag": st["name"].upper(), "img_url": logo, "imgs": [logo, x["img"]],
          "text": f"{c['name'].upper()} FROM {st['name'].upper()}", "colors": [WHITE],
          "say": f"It's {c['name']} from {st['name']}!"},
@@ -1033,9 +1034,11 @@ def build_binder_story(captions):
         return None
     picks.sort(key=lambda x: x[0])            # count up: cheapest first, biggest last
     key = "check your binder: " + ", ".join(f"{p[2]['name']} ({p[4]['name']})" for p in picks).lower()
-    scenes = [{"tag": "CHECK YOUR BINDER", "img_url": picks[-1][3], "text": "OLD CARDS YOU MIGHT ALREADY OWN",
+    # first-second hook: the top dollar amount is on screen immediately (case study wk1)
+    top_m = picks[-1][0]
+    scenes = [{"tag": "CHECK YOUR BINDER", "img_url": picks[-1][3], "text": f"${top_m:,.2f} CARD IN YOUR OLD BINDER?",
                "colors": [YELLOW, WHITE],
-               "say": "Check your binder! These old cards are worth real money now."}]
+               "say": f"One of these old cards is worth {say_dollars(top_m)}. Check your binder!"}]
     for i, (m, v, c, img, st) in enumerate(picks):
         rank = len(picks) - i
         year = _set_year(st)
