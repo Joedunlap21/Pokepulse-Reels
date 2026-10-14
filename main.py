@@ -633,7 +633,8 @@ def tcg_get(path, params):
     key = os.getenv("POKEMONTCG_API_KEY", "").strip()
     if key:
         headers["X-Api-Key"] = key
-    for attempt in range(3):
+    # pokemontcg.io often throws 500/502 for a few seconds - back off longer before giving up
+    for attempt in range(4):
         try:
             r = requests.get(f"{TCG_API}/{path}", params=params, headers=headers, timeout=30)
             if r.status_code == 200:
@@ -641,7 +642,8 @@ def tcg_get(path, params):
             print(f"pokemontcg.io {path} -> HTTP {r.status_code} (try {attempt+1})")
         except Exception as e:
             print(f"pokemontcg.io retry {attempt+1}: {e}")
-        time.sleep(3)
+        if attempt < 3:
+            time.sleep((3, 6, 10)[attempt])
     return {}
 
 def best_market(card):
