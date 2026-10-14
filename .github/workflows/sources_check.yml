@@ -1,0 +1,24 @@
+name: News Sources Check
+
+# Read-only: checks which news sites load from GitHub and return usable articles. Never posts.
+on:
+  workflow_dispatch:
+    inputs:
+      which:
+        description: 'all, onepiece or pokemon'
+        required: false
+        default: 'all'
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+      - run: pip install requests pillow cloudinary
+      - run: python sources_check.py "${{ github.event.inputs.which || 'all' }}"

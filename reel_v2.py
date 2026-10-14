@@ -103,8 +103,11 @@ def ai_script(story):
     if not key:
         return None
     facts = [sc["text"] + (f" ({sc['sub']})" if sc.get("sub") else "") for sc in story["scenes"]]
+    page = ("PokePulse, a trading card collector page on Instagram. This Reel is about the ONE PIECE CARD GAME "
+            "(Bandai) - never call it Pokemon" if story.get("topic") == "onepiece"
+            else "PokePulse, a Pokemon card collector page on Instagram")
     prompt = (
-        "You are the voice of PokePulse, a Pokemon card collector page on Instagram. "
+        f"You are the voice of {page}. "
         "Write the script for a short Reel like a hyped-up collector talking to friends - upbeat, high energy, "
         "fun, confident. Use contractions and short punchy sentences. End most lines with an exclamation mark "
         "so the voice reads them with energy. Plain everyday words. No news-anchor phrases "
@@ -117,7 +120,8 @@ def ai_script(story):
         "Slide 1 is the hook - make a collector stop scrolling (a surprise, a number, a question). "
         "Start straight with the news itself. Never open with filler like 'Okay', 'So', 'Guys', 'Yo', "
         "'This one's wild', 'You won't believe', 'Listen up'.\n"
-        "The last slide should land the point (why it matters / what to do).\n"
+        "The last slide should land the point (why it matters), then ask viewers to comment and send it to "
+        "a friend, e.g. 'Hype or nah? Comment below and send this to a friend!'\n"
         "Also write \"thumb\": the Reel cover text, 2-5 words, ALL CAPS, clickbait that makes people tap "
         "(curiosity, a number, a price, urgency) but 100% true to the source - no fake claims.\n"
         'Reply with JSON only: {"thumb": "...", "slides": [{"say": "...", "screen": "..."}]}\n\n'
@@ -433,6 +437,7 @@ def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None, ex
 
 BROLL_QUERIES = {
     "news":  ["trading cards", "card collection", "collector cards", "opening card pack"],
+    "onepiece": ["trading cards", "opening card pack", "card collection", "collector cards"],
     "drops": ["opening booster pack", "unboxing cards", "card shop", "trading card box"],
     "sales": ["graded card", "collector cards", "auction", "money counting"],
     "bulk":  ["sorting cards", "card collection", "binder cards", "trading cards"],
@@ -606,7 +611,7 @@ def make_cover(story, path="cover.jpg"):
         y += int(size * 0.95)
     # red banner
     tag = {"news": "BREAKING", "drops": "NEW DROP", "sales": "BIG SALE", "bulk": "CHECK YOUR BULK",
-           "chase": "TOP CHASE CARDS"}.get(story.get("topic"), "POKEPULSE")
+           "chase": "TOP CHASE CARDS", "onepiece": "ONE PIECE TCG"}.get(story.get("topic"), "POKEPULSE")
     tf = get_font(80)
     tw = text_w(d, tag, tf) + 80
     x = (W - tw) // 2

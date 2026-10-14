@@ -138,6 +138,34 @@ SOURCES = [
 ]
 PER_SOURCE = 6
 
+# One Piece Card Game news (same research + posting rules as Pokemon news: facts only from the source).
+ONEPIECE_SOURCES = [
+    {"name": "One Piece Card Game", "list": "https://en.onepiece-cardgame.com/topics/",
+     "base": "https://en.onepiece-cardgame.com",
+     "link_re": r'href="((?:https://en\.onepiece-cardgame\.com)?/topics/[^"#?]*?\d[^"#?]*)"',
+     "start": "<main", "end": ["</main>"]},
+    {"name": "Siliconera", "rss": "https://www.siliconera.com/tag/one-piece-card-game/feed/",
+     "base": "https://www.siliconera.com", "start": "<article", "end": ["</article>"], "max_imgs": 3},
+    {"name": "Dexerto", "rss": "https://www.dexerto.com/feed/tag/one-piece-card-game/", "base": "https://www.dexerto.com",
+     "start": "<article", "end": ["</article>"], "max_imgs": 2},
+    {"name": "Bing News", "rss": "https://www.bing.com/news/search?q=%22One+Piece+Card+Game%22&format=rss",
+     "base": "", "start": "<article", "end": ["</article>"], "max_imgs": 3},
+]
+ONEPIECE_CANDIDATES = [   # only used by sources_check.py to test new outlets
+    {"name": "Dexerto (one-piece tag)", "rss": "https://www.dexerto.com/feed/tag/one-piece/", "base": "https://www.dexerto.com",
+     "start": "<article", "end": ["</article>"], "max_imgs": 2},
+    {"name": "OnePieceTopDecks", "rss": "https://onepiecetopdecks.com/feed/", "base": "https://onepiecetopdecks.com",
+     "start": "<article", "end": ["</article>"], "max_imgs": 3},
+]
+OP_WORDS = ["card game", "tcg", "booster", "starter deck", "extra booster", "premium booster", "card", "promo",
+            "set", "pack", "release", "pre-order", "preorder", "reprint", "leader", "alt art", "manga rare",
+            "tournament kit", "bandai", "sealed", "case", "box"]
+
+# Never post celebrity / influencer stories (Joe's rule after the Kanye reel)
+CELEB = ["kanye", " ye ", "celebrity", "celebrities", "rapper", "logan paul", "influencer", "youtuber", "streamer",
+         "drake", "post malone", "justin bieber", "athlete", "nba ", "nfl ", "actor", "actress", "singer",
+         "lawsuit", "arrested", "police", "court"]
+
 TCG_WORDS = ["tcg", "card", "booster", "elite trainer", "expansion", "promo", "collection", "pack", "prerelease",
              "pokemon center", "psa", "graded", "auction", "tin", "binder", "set list", "pull rate", "illustration rare",
              "special illustration", "bundle", "sealed"]
@@ -195,7 +223,11 @@ def list_source(src):
             link = re.search(r"<link>(.*?)</link>", item, re.S)
             date = re.search(r"<pubDate>(.*?)</pubDate>", item, re.S)
             if link:
-                out.append((link.group(1).strip(), parse_date(date.group(1)) if date else None))
+                u = html.unescape(link.group(1).strip())
+                if "bing.com/news/apiclick" in u:
+                    from urllib.parse import urlparse, parse_qs
+                    u = (parse_qs(urlparse(u).query).get("url") or [u])[0]
+                out.append((u, parse_date(date.group(1)) if date else None))
         return out
     page = get_html(src["list"])
     seen, out = set(), []
@@ -243,7 +275,7 @@ def parse_article(src, url, rss_date=None):
     title = clean_text(re.sub(r"<[^>]+>", " ", h1[0])) if h1 else ""
     if og_t and (not title or len(title) > 160):
         title = clean_text(og_t[0])
-    title = re.split(r"\s+[|\-–]\s+(?:PokeBeach|PokeGuardian|Pokemon\.com|Dexerto)", title)[0].strip()
+    title = re.split(r"\s+[|\-–]\s+(?:PokeBeach|PokeGuardian|Pokemon\.com|Dexerto|Siliconera|ONE PIECE CARD GAME)", title)[0].strip()
 
     desc = clean_text((meta_all(page, "og:description") or [""])[0])
 
@@ -306,11 +338,12 @@ def word_hits(text, words):
     low = text.lower()
     return sum(1 for w in words if w in low)
 
-def gather_articles():
-    """Parsed, recent, TCG-relevant articles from all outlets, newest first."""
+def gather_articles(sources=None, franchise="pokemon"):
+    """Parsed, recent, card-relevant articles from all outlets, newest first."""
+    sources = sources or SOURCES
     cutoff = datetime.now(timezone.utc) - timedelta(days=MAX_ARTICLE_AGE_DAYS)
     arts = []
-    for src in SOURCES:
+    for src in sources:
         try:
             links = list_source(src)
         except Exception as e:
@@ -328,8 +361,15 @@ def gather_articles():
             if a["published"] and a["published"] < cutoff:
                 continue
             blob = " ".join([a["title"], a["desc"]] + a["paras"][:4])
-            if word_hits(blob, TCG_WORDS) == 0:
+            low = " " + blob.lower() + " "
+            if any(c in low for c in CELEB):
+                continue  # no celebrity / influencer stories
+            if franchise == "onepiece":
+                if "one piece" not in low or word_hits(blob, OP_WORDS) == 0:
+                    continue  # must be about the One Piece CARD game
+            elif word_hits(blob, TCG_WORDS) == 0:
                 continue  # skip non-card stuff (Pokemon GO events, video games...)
+            a["franchise"] = franchise
             arts.append(a)
     far_past = datetime(2000, 1, 1, tzinfo=timezone.utc)
     arts.sort(key=lambda a: a["published"] or far_past, reverse=True)
@@ -367,9 +407,12 @@ def build_article_story(art, kind):
         money = [s for s in sents if "$" in s or "psa" in s.lower() or "million" in s.lower()]
         details = (money + [s for s in sents if s not in money])[:3]
         first_tag, tags = "BIG SALE ALERT", ["THE SALE", "THE DETAILS", "WHY IT MATTERS"]
+    elif kind == "onepiece":
+        details = sents[:3]
+        first_tag, tags = "ONE PIECE TCG NEWS", ["THE DETAILS", "WHAT TO KNOW", "KEY INFO"]
     else:
         details = sents[:3]
-        first_tag, tags = "BREAKING NEWS", ["THE DETAILS", "WHAT TO KNOW", "KEY INFO"]
+        first_tag, tags = "POKEMON TCG NEWS", ["THE DETAILS", "WHAT TO KNOW", "KEY INFO"]
     if not details:
         return None
     imgs = art["images"]
@@ -379,18 +422,18 @@ def build_article_story(art, kind):
         scenes.append({"tag": tags[i], "img_url": imgs[(i + 1) % len(imgs)], "text": s.upper(),
                        "colors": [WHITE, YELLOW] if i % 2 == 0 else [YELLOW, WHITE]})
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
-            "caption_full": article_caption(art, sents)}
+            "caption_full": article_caption(art, sents, onepiece=(kind == "onepiece"))}
 
-def article_caption(art, sents, lead="🚨"):
+def article_caption(art, sents, lead="🚨", onepiece=False):
     text = ""
     for s in sents:
         if len(text) + len(s) + 1 > 900:
             break
         text = (text + " " + s).strip()
-    return (f"{lead} {art['title']}\n\n{text}\n\nSource: {art['source']}\n\n"
-            f"What are your thoughts on this? Drop your reaction below! 👇\n\n"
-            f"📬 Free Pokémon Market Alerts newsletter -> Link in Bio! pokemonnews.beehiiv.com/subscribe\n\n"
-            f"#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews")
+    tags = ("#OnePieceTCG #OnePieceCardGame #OPTCG #OnePiece #CardStax #TCGNews" if onepiece else
+            "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews")
+    lead = "🏴‍☠️ ONE PIECE TCG:" if onepiece else lead
+    return (f"{lead} {art['title']}\n\n{text}\n\nSource: {art['source']}\n\n{tags}")
 
 # ---------------------------------------------------------------- topic: drops
 
@@ -1150,7 +1193,7 @@ def vary_images(story, art):
     scenes = story["scenes"]
     own = list(dict.fromkeys(art["images"]))
     need = len(scenes) - len(own)
-    extras = extra_images(art, max(need, 0) + 6)
+    extras = [] if art.get("franchise") == "onepiece" else extra_images(art, max(need, 0) + 6)
     pool = own + [u for u in extras if u not in own]
     story["image_pool"] = pool
     if len(pool) < 2:
@@ -1179,12 +1222,18 @@ ENGAGE = {   # topic: (comment ask, share ask, spoken ask added to the end of th
     "chase":  ("Which one are you chasing? Comment 1, 2 or 3 👇",
                "📲 Send this to your pack-ripping buddy",
                "Which one are you chasing? Comment below and send this to a friend!"),
+    "news":   ("Hype or nah? Comment 🔥 or 🧊 👇",
+               "📲 Send this to the friend who needs to hear this",
+               "Hype or nah? Comment below, and send this to a friend who collects!"),
+    "onepiece": ("Are you chasing this one? Comment YES or NO 👇",
+                 "📲 Send this to your One Piece card buddy",
+                 "Are you chasing it? Comment below, and send this to your One Piece crew!"),
     "sales":  ("Would you pay that? Comment YES or NO 👇",
                "📲 Send this to the friend who needs to see this",
                "Would you pay that? Comment below and send this to a friend!"),
 }
 DEFAULT_ENGAGE = ("What do you think? Comment below 👇", "📲 Send this to a friend who collects", None)
-FOLLOW_LINE = "🔔 Follow for daily Pokémon drop alerts, restocks & price moves"
+FOLLOW_LINE = "🔔 Follow for daily Pokémon & One Piece card news, drops & big sales"
 NEWSLETTER_LINE = "📬 Free Poké Pulse newsletter: link in bio"
 
 def add_spoken_ask(story):
@@ -1220,16 +1269,19 @@ def finish_caption(cap, topic=None):
 
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["drops", "sales", "inside", "chase", "mover", "guess", "binder"]   # news + bulk removed
+TOPICS = ["drops", "sales", "inside", "news", "onepiece", "chase", "mover", "guess", "binder"]
 
-# Daily lineup: 5 Reels from this bot + 1 set countdown from PokePulse-Agent- (1:30pm),
-# every one a DIFFERENT format. Started by the Google Apps Script timer.
-#   8:30am  drops   - Restock / drop alert
-#  11:30am  inside  - What's Inside an upcoming product
-#   1:30pm  (PokePulse-Agent- set countdown)
-#   3:30pm  mover   - Card of the Day (biggest price move)
-#   6:00pm  guess   - Guess the Price game
-#   8:30pm  binder  - Check Your Binder (old cards worth money)
+# Daily lineup (Oct 14): card-ranking formats got no views, so it's voiced NEWS Reels now.
+# Times are the Google Apps Script timer slots (ET):
+#   6:30am  drops    - restock / drop alert
+#  11:30am  news     - Pokemon TCG news
+#   3:30pm  onepiece - One Piece Card Game news
+#   5:30pm  sales    - big card sales
+#   8:00pm  news     - Pokemon TCG news
+#  10:00pm  onepiece - One Piece Card Game news
+# Card formats (mover, guess, binder, chase) still work when run by hand from the Actions page.
+NEWS_TOPICS = ("news", "onepiece", "sales")   # different story every time, so they can repeat in a day
+
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
     if forced in TOPICS:
@@ -1238,12 +1290,14 @@ def topic_for_now():
     if 5 <= h <= 9:
         return "drops"
     if 10 <= h <= 13:
-        return "inside"
+        return "news"
     if 14 <= h <= 16:
-        return "mover"
-    if 17 <= h <= 19:
-        return "guess"
-    return "binder"
+        return "onepiece"
+    if 17 <= h <= 18:
+        return "sales"
+    if 19 <= h <= 20:
+        return "news"
+    return "onepiece"
 
 def build_story():
     posted = set()
@@ -1252,15 +1306,16 @@ def build_story():
             posted = {l.strip().lower() for l in f if l.strip()}
     captions = recent_ig_captions()
     first = topic_for_now()
-    # News reels are OFF for good. Never repeat a format the same day: if this slot's format already
-    # went out (or has nothing new), fall back to a format that hasn't been posted today.
-    done = formats_posted_today()
+    # Card-world news only (no celebrity stories). Card formats never repeat in a day; news, One Piece
+    # and sales can (each one is a different story). Nothing new? fall back to another topic.
+    done = formats_posted_today() - set(NEWS_TOPICS)
     if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes") and os.getenv("REEL_TOPIC", "").strip():
         done = set()   # test runs build the requested format even if it already posted today
-    backups = ["inside", "drops", "sales", "binder", "guess", "mover"]
+    backups = ["news", "onepiece", "inside", "drops", "sales"]
     order = [t for t in [first] + backups if t not in done]
     order = list(dict.fromkeys(order)) or [first]
     articles = None
+    op_articles = None
 
     for topic in order:
         print(f"--- Trying topic: {topic}")
@@ -1292,10 +1347,17 @@ def build_story():
             story = build_gallery_inside_story(captions, posted)
             if story:
                 return story
-        if articles is None:
-            articles = gather_articles()
-            print(f"{len(articles)} recent card-related articles found")
-        for art in articles:
+        if topic == "onepiece":
+            if op_articles is None:
+                op_articles = gather_articles(ONEPIECE_SOURCES, franchise="onepiece")
+                print(f"{len(op_articles)} recent One Piece card articles found")
+            pool = op_articles
+        else:
+            if articles is None:
+                articles = gather_articles()
+                print(f"{len(articles)} recent card-related articles found")
+            pool = articles
+        for art in pool:
             if already_posted(art["title"], posted, captions):
                 continue
             head = (art["title"] + " " + art["desc"] + " " + " ".join(art["paras"][:2])).lower()
@@ -1315,8 +1377,10 @@ def build_story():
                 if word_hits(art["title"] + " " + art["desc"], SALE_WORDS) < 1 or "$" not in blob:
                     continue
                 story = build_article_story(art, "sales")
+            elif topic in ("news", "onepiece"):
+                story = build_article_story(art, topic)   # card-world news (celebrity stories already filtered out)
             else:
-                continue                          # no general news reels
+                continue
             if story:
                 print(f"Picked [{topic}] {art['source']}: {art['title']}")
                 story["topic"] = topic
@@ -1458,7 +1522,7 @@ def draw_price_box(img, pr):
     return Image.alpha_composite(img.convert("RGBA"), layer).convert("RGB")
 
 COVER_LABELS = {"news": "POKÉMON NEWS", "drops": "DROP ALERT", "sales": "BIG SALE", "inside": "WHAT'S INSIDE",
-                "bulk": "BULK GOLD", "chase": "CHASE CARDS"}
+                "bulk": "BULK GOLD", "chase": "CHASE CARDS", "onepiece": "ONE PIECE TCG"}
 
 def make_cover(story, out_path="cover.jpg"):
     """Scroll-stopping thumbnail: big art, red label, huge 2-3 line headline with one yellow word,
