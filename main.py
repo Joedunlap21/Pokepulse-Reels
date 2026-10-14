@@ -638,6 +638,7 @@ def tcg_get(path, params):
             r = requests.get(f"{TCG_API}/{path}", params=params, headers=headers, timeout=30)
             if r.status_code == 200:
                 return r.json()
+            print(f"pokemontcg.io {path} -> HTTP {r.status_code} (try {attempt+1})")
         except Exception as e:
             print(f"pokemontcg.io retry {attempt+1}: {e}")
         time.sleep(3)
@@ -983,6 +984,7 @@ def build_guess_story(captions):
     sets = [s for s in all_sets() if "promo" not in s.get("name", "").lower() and (s.get("total") or 0) >= 60]
     rng = random.Random(datetime.now(timezone.utc).strftime("%Y-%m-%d") + "guess")
     rng.shuffle(sets)
+    print(f"Guess the Price: {len(sets)} sets to look through")
     for st in sets[:12]:
         for m, v, c, img in _popular_priced_cards(st, GUESS_MIN_PRICE)[:6]:
             key = f"guess the price: {c['name']} ({st['name']})".lower()
@@ -1251,6 +1253,8 @@ def build_story():
     # News reels are OFF for good. Never repeat a format the same day: if this slot's format already
     # went out (or has nothing new), fall back to a format that hasn't been posted today.
     done = formats_posted_today()
+    if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes") and os.getenv("REEL_TOPIC", "").strip():
+        done = set()   # test runs build the requested format even if it already posted today
     backups = ["inside", "drops", "sales", "binder", "guess", "mover"]
     order = [t for t in [first] + backups if t not in done]
     order = list(dict.fromkeys(order)) or [first]
