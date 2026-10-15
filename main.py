@@ -1284,8 +1284,16 @@ NEWS_TOPICS = ("news", "onepiece", "sales")   # different story every time, so t
 
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
-    if forced in TOPICS:
+    # The Apps Script timer still sends its old per-slot topics (mover at 3:30pm, inside at 10pm...),
+    # which overrode the Oct 14 news lineup. A picked topic is only used for test runs or when
+    # "exact_topic" is ticked on the Actions page; timer runs follow the lineup below.
+    yes = ("1", "true", "yes")
+    honor = (os.getenv("EXACT_TOPIC", "").strip().lower() in yes or
+             os.getenv("DRY_RUN", "").strip().lower() in yes)
+    if forced in TOPICS and honor:
         return forced
+    if forced:
+        print(f"Timer asked for '{forced}' - using the time-of-day lineup instead (tick exact_topic to force it)")
     h = datetime.now(ET).hour
     if 5 <= h <= 9:
         return "drops"
