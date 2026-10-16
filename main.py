@@ -182,7 +182,8 @@ MONTHS = r"(?:January|February|March|April|May|June|July|August|September|Octobe
 NOT_COLLECTOR = ["deck list", "decklist", "deck profile", "deck guide", "regional championship", "regionals",
                  "world championships", "tournament report", "top 8", "top cut", "meta", "standard format",
                  "rotation", "strategy", "matchup", "tier list", "carpe diem", "here, and i am", "writing another article",
-                 "pokemon tcg live", "pokemon go", "pokemon unite", "video game", "anime episode"]
+                 "pokemon tcg live", "pokemon go", "pokemon unite", "video game", "anime episode",
+                 "pokopia", "prime day"]
 
 JUNK = ["open media", "tap to unmute", "follow along with the video", "this feature may not be available",
         "launched pokebeach", "is a fansite", "follow us", "thank you very much", "patreon", "subscribe",
@@ -338,6 +339,18 @@ def word_hits(text, words):
     low = text.lower()
     return sum(1 for w in words if w in low)
 
+MONTHS = "january|february|march|april|may|june|july|august|september|october|november|december"
+
+def text_date(text):
+    """First 'Month D, YYYY' date written in the text (UTC), or None."""
+    m = re.search(r"\b(" + MONTHS + r")\s+(\d{1,2}),?\s+(20\d\d)\b", text or "", re.I)
+    if not m:
+        return None
+    try:
+        return datetime.strptime(f"{m.group(1)} {m.group(2)} {m.group(3)}", "%B %d %Y").replace(tzinfo=timezone.utc)
+    except ValueError:
+        return None
+
 def gather_articles(sources=None, franchise="pokemon"):
     """Parsed, recent, card-relevant articles from all outlets, newest first."""
     sources = sources or SOURCES
@@ -360,6 +373,10 @@ def gather_articles(sources=None, franchise="pokemon"):
                 continue
             if a["published"] and a["published"] < cutoff:
                 continue
+            if not a["published"]:   # undated page (e.g. official One Piece topics): use a date in the text
+                d = text_date(" ".join([a["title"], a["desc"]] + a["paras"][:2]))
+                if d and d < cutoff:
+                    continue
             blob = " ".join([a["title"], a["desc"]] + a["paras"][:4])
             low = " " + blob.lower() + " "
             if any(c in low for c in CELEB):
