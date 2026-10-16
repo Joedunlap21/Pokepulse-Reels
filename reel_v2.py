@@ -43,9 +43,11 @@ VOICE_MODE = os.getenv("REEL_VOICE_MODE", "").strip().lower() or "auto"
 MUSIC_VOLUME = 0.14                                      # music under the voice
 
 # Instagram covers the top ~220px and bottom ~420px (username, caption, buttons) and the right edge.
-ART_TOP, ART_BOTTOM = 320, 1090
-TAG_Y = 210
-CAP_CENTER_Y = 1270
+# Oct 16: art made much bigger (full width, ~60% of the screen) and captions moved lower.
+ART_TOP, ART_BOTTOM = 270, 1400
+TAG_Y = 200
+CAP_CENTER_Y = 1475
+CAP_BOTTOM_LIMIT = 1660   # keep multi-line text above IG's caption/username area
 CAP_MAX_W = 900
 FPS = 30
 
@@ -252,6 +254,21 @@ def speak(text, out_mp3):
 
 # ---------------------------------------------------------------- visuals
 
+def big_art(raw, box_h, box_w=W):
+    """Scale art to fill the box. Photos/landscape art are cropped (centre) to fill the full width and
+    most of the height; very wide banners keep more of their sides; tall art (cards) fits the height."""
+    art = raw.copy()
+    box_ar = box_w / box_h
+    ar = art.width / art.height
+    if ar > box_ar:
+        target = max(box_ar, ar * 0.62)          # never cut away more than ~38% of the width
+        if target < ar:
+            nw = int(art.height * target)
+            art = art.crop(((art.width - nw) // 2, 0, (art.width - nw) // 2 + nw, art.height))
+    s = min(box_w / art.width, box_h / art.height)
+    return art.resize((max(1, int(art.width * s)), max(1, int(art.height * s))), Image.Resampling.LANCZOS)
+
+
 def render_background(scene, path):
     bg = Image.new("RGB", (W, H), BG)
     raw = load_image(scene["img_url"])
@@ -262,25 +279,19 @@ def render_background(scene, path):
         l, t = (cover.width - W) // 2, (cover.height - H) // 2
         cover = cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(30))
         bg = Image.blend(cover, Image.new("RGB", (W, H), BG), 0.45)
-        # sharp art, as big as fits the art zone (full width for landscape images)
-        art = raw.copy()
-        if art.width / art.height > 1.4:   # wide news images: trim the sides so the art is bigger
-            nw = int(art.height * 1.33)
-            art = art.crop(((art.width - nw) // 2, 0, (art.width - nw) // 2 + nw, art.height))
-        box_h = ART_BOTTOM - ART_TOP
-        s = min(W / art.width, box_h / art.height)
-        art = art.resize((int(art.width * s), int(art.height * s)), Image.Resampling.LANCZOS)
+        # sharp art, full width and as tall as the art zone allows
+        art = big_art(raw, ART_BOTTOM - ART_TOP)
+        top = ART_TOP + (ART_BOTTOM - ART_TOP - art.height) // 2
         shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(shadow).rectangle(
-            [(W - art.width) // 2 + 10, ART_TOP + (box_h - art.height) // 2 + 14,
-             (W + art.width) // 2 + 10, ART_TOP + (box_h + art.height) // 2 + 14], fill=(0, 0, 0, 150))
+        ImageDraw.Draw(shadow).rectangle([(W - art.width) // 2, top + 16, (W + art.width) // 2, top + art.height + 16],
+                                         fill=(0, 0, 0, 150))
         bg = Image.alpha_composite(bg.convert("RGBA"), shadow.filter(ImageFilter.GaussianBlur(14))).convert("RGB")
-        bg.paste(art, ((W - art.width) // 2, ART_TOP + (box_h - art.height) // 2))
+        bg.paste(art, ((W - art.width) // 2, top))
     # darken behind the captions so they always read
     shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     sd = ImageDraw.Draw(shade)
-    for y in range(ART_BOTTOM - 40, H):
-        a = min(200, int(200 * (y - (ART_BOTTOM - 40)) / 160))
+    for y in range(ART_BOTTOM - 180, H):
+        a = min(200, int(200 * (y - (ART_BOTTOM - 180)) / 260))
         sd.line([(0, y), (W, y)], fill=(0, 0, 0, a))
     bg = Image.alpha_composite(bg.convert("RGBA"), shade).convert("RGB")
     bg.save(path)
@@ -344,7 +355,7 @@ def render_block(text, path):
         if len(lines) <= 3:
             break
     line_h = int(size * 1.0)
-    y = CAP_CENTER_Y - (len(lines) * line_h) // 2 + 40
+    y = min(CAP_CENTER_Y - (len(lines) * line_h) // 2, CAP_BOTTOM_LIMIT - len(lines) * line_h)
     space = text_w(d, " ", f)
     for ln in lines:
         x = (W - text_w(d, " ".join(ln), f, stroke)) // 2
@@ -565,6 +576,8 @@ def default_thumb(story):
     return words
 
 
+COVER_ART_TOP, COVER_ART_BOTTOM = 300, 1180
+
 def make_cover(story, path="cover.jpg"):
     """Clickbait cover: big art, dark vignette, huge 2-5 word hook. Key area kept inside the 4:5 grid crop."""
     text = story.get("thumb_text") or default_thumb(story)
@@ -579,19 +592,18 @@ def make_cover(story, path="cover.jpg"):
         l, t = (cover.width - W) // 2, (cover.height - H) // 2
         img = cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(18))
         img = Image.blend(img, Image.new("RGB", (W, H), BG), 0.5)
-        art = raw.copy()
-        s_ = min(980 / art.width, 900 / art.height)
-        art = art.resize((int(art.width * s_), int(art.height * s_)), Image.Resampling.LANCZOS)
+        art = big_art(raw, COVER_ART_BOTTOM - COVER_ART_TOP)
+        gx, gy = (W - art.width) // 2, COVER_ART_TOP + (COVER_ART_BOTTOM - COVER_ART_TOP - art.height) // 2
         glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        gx, gy = (W - art.width) // 2, 820
-        ImageDraw.Draw(glow).rounded_rectangle([gx - 18, gy - 18, gx + art.width + 18, gy + art.height + 18],
+        ImageDraw.Draw(glow).rounded_rectangle([gx - 14, gy - 14, gx + art.width + 14, gy + art.height + 14],
                                                radius=30, fill=(255, 230, 0, 210))
         img = Image.alpha_composite(img.convert("RGBA"), glow.filter(ImageFilter.GaussianBlur(22))).convert("RGB")
         img.paste(art, (gx, gy))
     d = ImageDraw.Draw(img)
-    # hook text, top half of the 4:5 safe area
+    # hook text under the art, still inside the profile-grid crop
     words = text.split()
-    for size in range(230, 100, -10):
+    box_top, box_h = COVER_ART_BOTTOM + 30, 420
+    for size in range(210, 90, -10):
         f, stroke = get_font(size), max(8, size // 12)
         lines, cur = [], []
         for w in words:
@@ -600,9 +612,9 @@ def make_cover(story, path="cover.jpg"):
             cur.append(w)
         if cur:
             lines.append(cur)
-        if len(lines) <= 3 and len(lines) * size * 0.95 <= 560:
+        if len(lines) <= 3 and len(lines) * size * 0.95 <= box_h:
             break
-    y = 250 + (560 - int(len(lines) * size * 0.95)) // 2
+    y = box_top + (box_h - int(len(lines) * size * 0.95)) // 2
     for n, ln in enumerate(lines):
         line = " ".join(ln)
         x = (W - text_w(d, line, f, stroke)) // 2
@@ -615,8 +627,8 @@ def make_cover(story, path="cover.jpg"):
     tf = get_font(80)
     tw = text_w(d, tag, tf) + 80
     x = (W - tw) // 2
-    d.rounded_rectangle([x, 140, x + tw, 240], radius=16, fill=RED)
-    d.text((x + 40, 150), tag, font=tf, fill=WHITE)
+    d.rounded_rectangle([x, 230, x + tw, 330], radius=16, fill=RED)
+    d.text((x + 40, 240), tag, font=tf, fill=WHITE)
     img.save(path, quality=92)
     print(f"Cover: '{text}'")
     return path

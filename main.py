@@ -1459,7 +1459,8 @@ def render_scene_layers(scene, bg_path, txt_path):
             art.thumbnail((600, IMG_BOTTOM - 120), Image.Resampling.LANCZOS)
             bg.paste(art, (40 + (600 - art.width) // 2, 60 + (IMG_BOTTOM - 120 - art.height) // 2))
         else:
-            art.thumbnail((1000, IMG_BOTTOM - 70), Image.Resampling.LANCZOS)
+            from reel_v2 import big_art
+            art = big_art(art, IMG_BOTTOM - 70)
             bg.paste(art, ((W - art.width) // 2, 40 + (IMG_BOTTOM - 70 - art.height) // 2))
 
     # real fade from the art into the dark text area (alpha composite, not solid lines)
