@@ -1415,7 +1415,7 @@ def build_story():
                     vary_images(story, art)
                 except Exception as e:
                     print(f"Couldn't add extra images ({e})")
-                if topic in ("news", "sales"):
+                if topic in ("news", "sales", "onepiece"):
                     try:                          # pictures of the people / places / Pokemon each slide mentions
                         from story_images import enrich
                         enrich(story)
