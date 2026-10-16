@@ -1,5 +1,5 @@
 {
-  "_about": "Stock backgrounds the bot downloads on demand (free licenses: Pixabay, Pexels, Unsplash). 'keywords' (case-sensitive, so 'Target' the store, not 'target price') = used when the post mentions that store. 'kind': pokemon / space / sparkle / meadow = general backgrounds for any Reel; store = generic shop footage for drop/sales Reels. Your own files in clips/ still win when their file name matches the post.",
+  "_about": "Stock backgrounds the bot downloads on demand (free licenses: Pixabay, Pexels, Unsplash). 'keywords' (case-sensitive, so 'Target' the store, not 'target price') = used when the post mentions that store. 'kind': pokemon / space / sparkle / meadow / toys / ai = general backgrounds for any Reel; store = generic shop footage for drop/sales Reels. Your own files in clips/ still win when their file name matches the post.",
   "clips": [
     {
       "file": "lib_target_1.jpg",
@@ -201,6 +201,130 @@
       "keywords": [],
       "kind": "store",
       "url": "https://cdn.pixabay.com/video/2021/07/05/80344-572853594_large.mp4"
+    },
+    {
+      "file": "lib_toys_store_aisle.mp4",
+      "keywords": [],
+      "kind": "toys",
+      "url": "https://videos.pexels.com/video-files/30765045/13159764_1440_2560_24fps.mp4"
+    },
+    {
+      "file": "lib_toys_claw_machines.mp4",
+      "keywords": [],
+      "kind": "toys",
+      "url": "https://videos.pexels.com/video-files/28410043/12377728_2560_1440_30fps.mp4"
+    },
+    {
+      "file": "lib_toys_robots.mp4",
+      "keywords": [],
+      "kind": "toys",
+      "url": "https://videos.pexels.com/video-files/38476919/16340950_2560_1440_25fps.mp4"
+    },
+    {
+      "file": "lib_store_mall_escalators.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://videos.pexels.com/video-files/35057742/14850706_1440_2560_60fps.mp4"
+    },
+    {
+      "file": "lib_store_aisle_day.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://videos.pexels.com/video-files/34506445/14620294_2560_1440_30fps.mp4"
+    },
+    {
+      "file": "lib_store_cart_journey.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://videos.pexels.com/video-files/29068393/12563855_1920_1080_30fps.mp4"
+    },
+    {
+      "file": "lib_store_pov_busy.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://videos.pexels.com/video-files/35226314/14924150_2560_1440_30fps.mp4"
+    },
+    {
+      "file": "lib_store_parking_lot.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://videos.pexels.com/video-files/31621464/13472457_2560_1440_30fps.mp4"
+    },
+    {
+      "file": "lib_store_aerial_front.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://videos.pexels.com/video-files/5386543/5386543-uhd_2562_1440_30fps.mp4"
+    },
+    {
+      "file": "lib_space_mixkit_nebula.mp4",
+      "keywords": [],
+      "kind": "space",
+      "url": "https://assets.mixkit.co/videos/14185/14185-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/14185/14185-360.mp4"
+    },
+    {
+      "file": "lib_space_mixkit_nebulae_travel.mp4",
+      "keywords": [],
+      "kind": "space",
+      "url": "https://assets.mixkit.co/videos/30889/30889-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/30889/30889-360.mp4"
+    },
+    {
+      "file": "lib_space_mixkit_stars_nebulae.mp4",
+      "keywords": [],
+      "kind": "space",
+      "url": "https://assets.mixkit.co/videos/14151/14151-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/14151/14151-360.mp4"
+    },
+    {
+      "file": "lib_space_mixkit_supernova.mp4",
+      "keywords": [],
+      "kind": "space",
+      "url": "https://assets.mixkit.co/videos/10418/10418-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/10418/10418-360.mp4"
+    },
+    {
+      "file": "lib_space_mixkit_cosmos.mp4",
+      "keywords": [],
+      "kind": "space",
+      "url": "https://assets.mixkit.co/videos/32910/32910-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/32910/32910-360.mp4"
+    },
+    {
+      "file": "lib_space_mixkit_star_shower.mp4",
+      "keywords": [],
+      "kind": "space",
+      "url": "https://assets.mixkit.co/videos/14468/14468-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/14468/14468-360.mp4"
+    },
+    {
+      "file": "lib_store_mixkit_browsing_items.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://assets.mixkit.co/videos/25438/25438-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/25438/25438-360.mp4"
+    },
+    {
+      "file": "lib_store_mixkit_cart_add.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://assets.mixkit.co/videos/14991/14991-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/14991/14991-360.mp4"
+    },
+    {
+      "file": "lib_store_mixkit_mall_timelapse.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://assets.mixkit.co/videos/31086/31086-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/31086/31086-360.mp4"
+    },
+    {
+      "file": "lib_store_mixkit_mall_shoppers.mp4",
+      "keywords": [],
+      "kind": "store",
+      "url": "https://assets.mixkit.co/videos/25516/25516-720.mp4",
+      "alt_url": "https://assets.mixkit.co/videos/25516/25516-360.mp4"
     }
   ]
 }

@@ -905,15 +905,16 @@ def _fetch_library_clip(entry):
     path = os.path.join("clips", entry["file"])
     if os.path.exists(path) and os.path.getsize(path) > 20_000:
         return path
-    try:
-        r = requests.get(entry["url"], headers={"User-Agent": "Mozilla/5.0"}, timeout=90)
-        if r.status_code == 200 and len(r.content) > 20_000:
-            with open(path, "wb") as fh:
-                fh.write(r.content)
-            return path
-        print(f"Library clip {entry['file']}: HTTP {r.status_code}, {len(r.content)} bytes")
-    except Exception as e:
-        print(f"Library clip {entry['file']} failed ({e})")
+    for url in [entry["url"]] + ([entry["alt_url"]] if entry.get("alt_url") else []):
+        try:
+            r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=90)
+            if r.status_code == 200 and len(r.content) > 20_000:
+                with open(path, "wb") as fh:
+                    fh.write(r.content)
+                return path
+            print(f"Library clip {entry['file']}: HTTP {r.status_code}, {len(r.content)} bytes")
+        except Exception as e:
+            print(f"Library clip {entry['file']} failed ({e})")
     return None
 
 
@@ -922,7 +923,7 @@ def library_background(text, general=False, kinds=None):
     general background: Pokemon-style, space, sparkle or meadow clips (kinds= narrows it, e.g. ["store"])."""
     lib = _library()
     if general:
-        want = set(kinds or ["pokemon", "space", "sparkle", "meadow"])
+        want = set(kinds or ["pokemon", "space", "sparkle", "meadow", "toys", "ai"])
         pool = [e for e in lib if not e.get("keywords") and e.get("kind", "pokemon") in want]
     else:
         hits = {}
