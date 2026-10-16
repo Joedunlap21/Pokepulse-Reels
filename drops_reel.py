@@ -256,6 +256,14 @@ def hblur(arr, k):
 
 
 # ================================================================ background
+_GAL = []
+def _galaxy_arr():
+    if not _GAL:
+        from galaxy import galaxy
+        _GAL.append(np.array(galaxy(W, H)))
+    return _GAL[0]
+
+
 class Background:
     def __init__(self, src, blur=0):
         self.cap = None
@@ -320,7 +328,8 @@ def render_video(shots, out_path, end_card=None, end_secs=2.2, vo_clips=(), musi
     for s in shots:
         if s.get("bg") and s["bg"] not in bgs:
             own = s["bg"].replace("\\", "/").startswith("clips/")
-            bgs[s["bg"]] = Background(s["bg"], 0 if s["bg"].lower().endswith((".mp4", ".mov", ".m4v")) or own else bg_blur)
+            sharp = s["bg"].lower().endswith((".mp4", ".mov", ".m4v")) or own or "galaxy" in os.path.basename(s["bg"])
+            bgs[s["bg"]] = Background(s["bg"], 0 if sharp else bg_blur)
         if s.get("logo") and s["logo"] not in logos:
             logos[s["logo"]] = with_shadow(fit(Image.open(s["logo"]).convert("RGBA"), LOGO_MAX_W, LOGO_MAX_H),
                                            blur=12, off=(0, 8), alpha=140)
@@ -354,7 +363,7 @@ def render_video(shots, out_path, end_card=None, end_secs=2.2, vo_clips=(), musi
             ff.stdin.write(np.ascontiguousarray(fr, dtype=np.uint8).tobytes())
             continue
         s = next((x for x in shots if x["start"] <= t < x["end"]), shots[-1])
-        bgarr = bgs[s["bg"]].frame(t) if s.get("bg") else np.full((H, W, 3), 18, np.uint8)
+        bgarr = bgs[s["bg"]].frame(t) if s.get("bg") else _galaxy_arr()
         if t - s["bg_in"] < WHIP and s["bg_in"] > 0:
             bgarr = hblur(bgarr, 90 * (1 - (t - s["bg_in"]) / WHIP))
         frame = Image.fromarray(bgarr).convert("RGBA")
@@ -998,17 +1007,19 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
 
     # background: YOUR clips/photos in the clips/ folder first (best name match), then free b-roll,
     # else the blurred product picture
-    bg = bg_path
+    from galaxy import galaxy
+    bg = os.path.join(work, "galaxy_bg.jpg")      # galaxy background (Oct 16: no black / blurry backgrounds)
+    galaxy(W, H).save(bg, quality=94)
     mine = pick_own_background(story, source)
     if mine:
         bg = mine
-    elif os.getenv("DROPS_BROLL", "on").lower() != "off":
+    elif os.getenv("DROPS_BROLL", "off").lower() == "on":
         try:
             import reel_v2
             reel_v2.BROLL_QUERIES["drops_store"] = ["store shelves", "shopping cart store", "toy store",
                                                    "retail store aisle", "card shop"]
             got = reel_v2.get_broll("drops_store", out=os.path.join(work, "broll.mp4"))
-            bg = got or bg_path
+            bg = got or bg
         except Exception as e:
             print(f"B-roll skipped ({e})")
 

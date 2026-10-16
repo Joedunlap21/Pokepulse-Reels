@@ -23,6 +23,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFilter
 
 from main import W, H, BG, YELLOW, WHITE, GREEN, RED, get_font, text_w, load_image
+from galaxy import galaxy, tint_fade
 
 # The "Multilingual" voices are Microsoft's newest, most human-sounding ones.
 VOICES = ["en-US-AndrewMultilingualNeural", "en-US-BrianMultilingualNeural",
@@ -270,15 +271,9 @@ def big_art(raw, box_h, box_w=W):
 
 
 def render_background(scene, path):
-    bg = Image.new("RGB", (W, H), BG)
+    bg = galaxy(W, H)                       # galaxy background, never black
     raw = load_image(scene["img_url"])
     if raw is not None:
-        # full-screen blurred version so the whole frame has colour
-        s = max(W / raw.width, H / raw.height)
-        cover = raw.resize((int(raw.width * s) + 1, int(raw.height * s) + 1), Image.Resampling.LANCZOS)
-        l, t = (cover.width - W) // 2, (cover.height - H) // 2
-        cover = cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(30))
-        bg = Image.blend(cover, Image.new("RGB", (W, H), BG), 0.45)
         # sharp art, full width and as tall as the art zone allows
         art = big_art(raw, ART_BOTTOM - ART_TOP)
         top = ART_TOP + (ART_BOTTOM - ART_TOP - art.height) // 2
@@ -287,12 +282,8 @@ def render_background(scene, path):
                                          fill=(0, 0, 0, 150))
         bg = Image.alpha_composite(bg.convert("RGBA"), shadow.filter(ImageFilter.GaussianBlur(14))).convert("RGB")
         bg.paste(art, ((W - art.width) // 2, top))
-    # darken behind the captions so they always read
-    shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    sd = ImageDraw.Draw(shade)
-    for y in range(ART_BOTTOM - 180, H):
-        a = min(200, int(200 * (y - (ART_BOTTOM - 180)) / 260))
-        sd.line([(0, y), (W, y)], fill=(0, 0, 0, a))
+    # soft purple wash behind the captions so they always read (stars still show through)
+    shade = tint_fade(W, H, ART_BOTTOM - 120, ART_BOTTOM + 140, max_alpha=120)
     bg = Image.alpha_composite(bg.convert("RGBA"), shade).convert("RGB")
     bg.save(path)
 
@@ -584,14 +575,9 @@ def make_cover(story, path="cover.jpg"):
     sc = story["scenes"][1] if story.get("topic") in ("bulk", "chase") and len(story["scenes"]) > 1 else story["scenes"][0]
     if story.get("topic") == "chase":
         sc = story["scenes"][-1]           # #1 most valuable card
-    img = Image.new("RGB", (W, H), BG)
+    img = galaxy(W, H)
     raw = load_image(sc["img_url"])
     if raw is not None:
-        s_ = max(W / raw.width, H / raw.height)
-        cover = raw.resize((int(raw.width * s_) + 1, int(raw.height * s_) + 1), Image.Resampling.LANCZOS)
-        l, t = (cover.width - W) // 2, (cover.height - H) // 2
-        img = cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(18))
-        img = Image.blend(img, Image.new("RGB", (W, H), BG), 0.5)
         art = big_art(raw, COVER_ART_BOTTOM - COVER_ART_TOP)
         gx, gy = (W - art.width) // 2, COVER_ART_TOP + (COVER_ART_BOTTOM - COVER_ART_TOP - art.height) // 2
         glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
