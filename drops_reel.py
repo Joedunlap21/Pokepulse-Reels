@@ -34,18 +34,18 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 W, H, FPS = 1080, 1920, 30
 
 # ---- look & feel (matched to the reference reels) ----
-CAPTION_Y = 0.79           # caption block centre (fraction of height) - big text across the bottom
-CAPTION_SIZE = 132
-CAPTION_MAX_W = 1000
-WORDS_PER_CHUNK = 4
+CAPTION_Y = 0.405          # caption block centre (fraction of height)
+CAPTION_SIZE = 94
+CAPTION_MAX_W = 900
+WORDS_PER_CHUNK = 3
 YELLOW = (255, 232, 20)
 WHITE = (255, 255, 255)
 PRICE_GREEN = (52, 230, 64)
-LOGO_Y = 0.15
+LOGO_Y = 0.185
 LOGO_MAX_W = 0.72 * W
-LOGO_MAX_H = 0.13 * H
-PRODUCT_CY = 0.42
-PRODUCT_BOX = (0.98 * W, 0.46 * H)   # products fill the middle of the screen
+LOGO_MAX_H = 0.17 * H
+PRODUCT_CY = 0.675
+PRODUCT_BOX = (0.94 * W, 0.42 * H)
 WHIP = 0.24                # seconds for whip-in transitions
 MUSIC_VOLUME = 0.32          # music bed under the voice (0.14 measured ~30 dB under the voice = basically silent)
 
@@ -181,7 +181,7 @@ def render_caption(chunk, active_idx):
         return _cap_cache[key]
     toks = [re.sub(r"[^\w$%'.&+-]", "", w[0]).strip(".").upper() or w[0].upper() for w in chunk]
     space = -36  # glyph images carry padding
-    for size in (CAPTION_SIZE, 112, 96, 80):  # shrink long words so it stays on 2 lines
+    for size in (CAPTION_SIZE, 80, 68):      # shrink long words so it stays on 2 lines
         imgs = [stroked_text(t, size, YELLOW if i == active_idx else WHITE) for i, t in enumerate(toks)]
         lines, line, lw = [], [], 0
         for im in imgs:
@@ -218,7 +218,7 @@ def product_layer(products):
     if n == 0:
         return layer
     if n == 1:
-        cells = [(0.5, 0.5, 0.94, 1.0)]
+        cells = [(0.5, 0.5, 0.80, 1.0)]
     elif n == 2:
         cells = [(0.32, 0.36, 0.58, 0.74), (0.66, 0.62, 0.58, 0.74)]
     elif n == 3 and all(p.get("card") for p in products):   # 3 cards side by side, middle one raised
@@ -256,14 +256,6 @@ def hblur(arr, k):
 
 
 # ================================================================ background
-_GAL = []
-def _galaxy_arr():
-    if not _GAL:
-        from galaxy import galaxy
-        _GAL.append(np.array(galaxy(W, H)))
-    return _GAL[0]
-
-
 class Background:
     def __init__(self, src, blur=0):
         self.cap = None
@@ -328,8 +320,7 @@ def render_video(shots, out_path, end_card=None, end_secs=2.2, vo_clips=(), musi
     for s in shots:
         if s.get("bg") and s["bg"] not in bgs:
             own = s["bg"].replace("\\", "/").startswith("clips/")
-            sharp = s["bg"].lower().endswith((".mp4", ".mov", ".m4v")) or own or "galaxy" in os.path.basename(s["bg"])
-            bgs[s["bg"]] = Background(s["bg"], 0 if sharp else bg_blur)
+            bgs[s["bg"]] = Background(s["bg"], 0 if s["bg"].lower().endswith((".mp4", ".mov", ".m4v")) or own else bg_blur)
         if s.get("logo") and s["logo"] not in logos:
             logos[s["logo"]] = with_shadow(fit(Image.open(s["logo"]).convert("RGBA"), LOGO_MAX_W, LOGO_MAX_H),
                                            blur=12, off=(0, 8), alpha=140)
@@ -363,7 +354,7 @@ def render_video(shots, out_path, end_card=None, end_secs=2.2, vo_clips=(), musi
             ff.stdin.write(np.ascontiguousarray(fr, dtype=np.uint8).tobytes())
             continue
         s = next((x for x in shots if x["start"] <= t < x["end"]), shots[-1])
-        bgarr = bgs[s["bg"]].frame(t) if s.get("bg") else _galaxy_arr()
+        bgarr = bgs[s["bg"]].frame(t) if s.get("bg") else np.full((H, W, 3), 18, np.uint8)
         if t - s["bg_in"] < WHIP and s["bg_in"] > 0:
             bgarr = hblur(bgarr, 90 * (1 - (t - s["bg_in"]) / WHIP))
         frame = Image.fromarray(bgarr).convert("RGBA")
@@ -905,26 +896,23 @@ def _fetch_library_clip(entry):
     path = os.path.join("clips", entry["file"])
     if os.path.exists(path) and os.path.getsize(path) > 20_000:
         return path
-    for url in [entry["url"]] + ([entry["alt_url"]] if entry.get("alt_url") else []):
-        try:
-            r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=90)
-            if r.status_code == 200 and len(r.content) > 20_000:
-                with open(path, "wb") as fh:
-                    fh.write(r.content)
-                return path
-            print(f"Library clip {entry['file']}: HTTP {r.status_code}, {len(r.content)} bytes")
-        except Exception as e:
-            print(f"Library clip {entry['file']} failed ({e})")
+    try:
+        r = requests.get(entry["url"], headers={"User-Agent": "Mozilla/5.0"}, timeout=90)
+        if r.status_code == 200 and len(r.content) > 20_000:
+            with open(path, "wb") as fh:
+                fh.write(r.content)
+            return path
+        print(f"Library clip {entry['file']}: HTTP {r.status_code}, {len(r.content)} bytes")
+    except Exception as e:
+        print(f"Library clip {entry['file']} failed ({e})")
     return None
 
 
-def library_background(text, general=False, kinds=None):
-    """Store clip when the post names Target / Walmart / Best Buy (case-sensitive), else (general=True) a
-    general background: Pokemon-style, space, sparkle or meadow clips (kinds= narrows it, e.g. ["store"])."""
+def library_background(text, general=False):
+    """Store clip when the post names Target / Walmart / Best Buy (case-sensitive), else (general=True) a Pokemon clip."""
     lib = _library()
     if general:
-        want = set(kinds or ["pokemon", "space", "sparkle", "meadow", "toys", "ai"])
-        pool = [e for e in lib if not e.get("keywords") and e.get("kind", "pokemon") in want]
+        pool = [e for e in lib if not e.get("keywords")]
     else:
         hits = {}
         for e in lib:
@@ -955,9 +943,6 @@ def pick_own_background(story, source):
     raw = " ".join([source, story.get("product_name", ""), story.get("set_name", ""), story.get("topic", "")])
     text = _norm(raw)
     if not files:
-        if story.get("topic") in ("drops", "sales") and random.random() < 0.5:
-            return library_background(raw) or library_background(raw, general=True, kinds=["store"]) \
-                or library_background(raw, general=True)
         return library_background(raw) or library_background(raw, general=True)
     def score(path):
         words = [w for w in re.split(r"[^a-z0-9]+", os.path.splitext(os.path.basename(path))[0].lower())
@@ -1013,19 +998,17 @@ def compile_drop_reel(story, output_mp4="pokepulse_reel.mp4"):
 
     # background: YOUR clips/photos in the clips/ folder first (best name match), then free b-roll,
     # else the blurred product picture
-    from galaxy import galaxy
-    bg = os.path.join(work, "galaxy_bg.jpg")      # galaxy background (Oct 16: no black / blurry backgrounds)
-    galaxy(W, H).save(bg, quality=94)
+    bg = bg_path
     mine = pick_own_background(story, source)
     if mine:
         bg = mine
-    elif os.getenv("DROPS_BROLL", "off").lower() == "on":
+    elif os.getenv("DROPS_BROLL", "on").lower() != "off":
         try:
             import reel_v2
             reel_v2.BROLL_QUERIES["drops_store"] = ["store shelves", "shopping cart store", "toy store",
                                                    "retail store aisle", "card shop"]
             got = reel_v2.get_broll("drops_store", out=os.path.join(work, "broll.mp4"))
-            bg = got or bg
+            bg = got or bg_path
         except Exception as e:
             print(f"B-roll skipped ({e})")
 

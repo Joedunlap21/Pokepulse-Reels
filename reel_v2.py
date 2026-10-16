@@ -23,7 +23,6 @@ import requests
 from PIL import Image, ImageDraw, ImageFilter
 
 from main import W, H, BG, YELLOW, WHITE, GREEN, RED, get_font, text_w, load_image
-from galaxy import galaxy, tint_fade
 
 # The "Multilingual" voices are Microsoft's newest, most human-sounding ones.
 VOICES = ["en-US-AndrewMultilingualNeural", "en-US-BrianMultilingualNeural",
@@ -44,19 +43,10 @@ VOICE_MODE = os.getenv("REEL_VOICE_MODE", "").strip().lower() or "auto"
 MUSIC_VOLUME = 0.14                                      # music under the voice
 
 # Instagram covers the top ~220px and bottom ~420px (username, caption, buttons) and the right edge.
-# Oct 16: art made much bigger (full width, ~60% of the screen) and captions moved lower.
-ART_TOP, ART_BOTTOM = 260, 1330
-TAG_Y = 190
-# Oct 16 (Joe): captions much bigger, up to 2 lines, filling the bottom of the screen
-CAP_CENTER_Y = 1560
-CAP_BOTTOM_LIMIT = 1790
-CAP_MAX_W = 1010
-CAP_MAX_SIZE = 190
-
-# Background behind the art (Oct 16, Joe: Pokemon backgrounds + videos, not only galaxy).
-# One choice per Reel: "video" (Poke Ball / Pokemon-style or store clip from clips/library.json),
-# "art" (the story's own Pokemon pictures, full screen) or "galaxy". Force with repo variable REEL_BG.
-BG_MODE = {"mode": "galaxy", "video": None, "img": None, "imgs": []}
+ART_TOP, ART_BOTTOM = 320, 1090
+TAG_Y = 210
+CAP_CENTER_Y = 1270
+CAP_MAX_W = 900
 FPS = 30
 
 
@@ -262,98 +252,38 @@ def speak(text, out_mp3):
 
 # ---------------------------------------------------------------- visuals
 
-def big_art(raw, box_h, box_w=W):
-    """Scale art to fill the box. Photos/landscape art are cropped (centre) to fill the full width and
-    most of the height; very wide banners keep more of their sides; tall art (cards) fits the height."""
-    art = raw.copy()
-    box_ar = box_w / box_h
-    ar = art.width / art.height
-    if ar > box_ar:
-        target = max(box_ar, ar * 0.62)          # never cut away more than ~38% of the width
-        if target < ar:
-            nw = int(art.height * target)
-            art = art.crop(((art.width - nw) // 2, 0, (art.width - nw) // 2 + nw, art.height))
-    s = min(box_w / art.width, box_h / art.height)
-    return art.resize((max(1, int(art.width * s)), max(1, int(art.height * s))), Image.Resampling.LANCZOS)
-
-
-def pick_background(story):
-    """Choose this Reel's background: store clip if a store is named, else a mix of Pokemon videos,
-    the story's own pictures and the galaxy."""
-    forced = os.getenv("REEL_BG", "").strip().lower()
-    text = " ".join([story.get("context", "")] + [s.get("text", "") for s in story.get("scenes", [])])
-    # the article's own Pokemon pictures first, then the story's picture pool and scene art
-    imgs = list(dict.fromkeys(u for u in (list(story.get("article_images") or []) + list(story.get("image_pool") or [])
-                                          + [s.get("img_url") for s in story.get("scenes", [])]) if u))
-    try:
-        from drops_reel import library_background
-    except Exception as e:
-        print(f"Background library unavailable ({e})")
-        library_background = None
-    mode = forced if forced in ("video", "art", "galaxy") else random.choices(["video", "art", "galaxy"], [30, 60, 10])[0]
-    if library_background and forced in ("", "video"):
-        store = library_background(text)                         # Target / Walmart / Best Buy footage
-        if store:
-            BG_MODE.update(mode="video" if store.lower().endswith((".mp4", ".mov", ".m4v")) else "art",
-                           video=store, img=store)
-            print(f"Background: store {store}")
-            return
-    if mode == "video" and library_background:
-        clip = library_background(text, general=True)           # Poke Ball / Pokemon-style clips
-        if clip and clip.lower().endswith((".mp4", ".mov", ".m4v")):
-            BG_MODE.update(mode="video", video=clip)
-            print(f"Background: video {clip}")
-            return
-        mode = "art"
-    if mode == "art" and imgs:
-        BG_MODE.update(mode="art", img=random.choice(imgs[1:] or imgs), imgs=imgs)
-        print(f"Background: story pictures ({len(imgs)} to rotate)")
-        return
-    BG_MODE.update(mode="galaxy")
-    print("Background: galaxy")
-
-
-def _photo_bg(src):
-    """Full-screen picture background: sharp, slightly dimmed, purple tint (never black)."""
-    raw = Image.open(src).convert("RGB") if os.path.exists(str(src)) else load_image(src)
-    if raw is None:
-        return None
-    s = max(W / raw.width, H / raw.height)
-    cov = raw.resize((int(raw.width * s) + 1, int(raw.height * s) + 1), Image.Resampling.LANCZOS)
-    l, t = (cov.width - W) // 2, (cov.height - H) // 2
-    cov = cov.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(4))
-    return Image.blend(cov, Image.new("RGB", (W, H), (40, 16, 80)), 0.35)
-
-
-def render_background(scene, path, layer_only=False):
-    """layer_only=True -> transparent PNG (art + caption wash) to lay over a background video."""
-    if layer_only:
-        bg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    else:
-        bg = None
-        if BG_MODE["mode"] == "art" and BG_MODE["img"]:
-            # a different Pokemon picture from the story behind each scene (not the one shown on top)
-            pool = [u for u in BG_MODE.get("imgs") or [] if u != scene.get("img_url")] or [BG_MODE["img"]]
-            pick = pool[sum(map(ord, str(scene.get("img_url", "")))) % len(pool)]
-            try:
-                bg = _photo_bg(pick)
-            except Exception as e:
-                print(f"Background picture failed ({e})")
-        bg = bg or galaxy(W, H)
+def render_background(scene, path):
+    bg = Image.new("RGB", (W, H), BG)
     raw = load_image(scene["img_url"])
     if raw is not None:
-        # sharp art, full width and as tall as the art zone allows
-        art = big_art(raw, ART_BOTTOM - ART_TOP)
-        top = ART_TOP + (ART_BOTTOM - ART_TOP - art.height) // 2
+        # full-screen blurred version so the whole frame has colour
+        s = max(W / raw.width, H / raw.height)
+        cover = raw.resize((int(raw.width * s) + 1, int(raw.height * s) + 1), Image.Resampling.LANCZOS)
+        l, t = (cover.width - W) // 2, (cover.height - H) // 2
+        cover = cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(30))
+        bg = Image.blend(cover, Image.new("RGB", (W, H), BG), 0.45)
+        # sharp art, as big as fits the art zone (full width for landscape images)
+        art = raw.copy()
+        if art.width / art.height > 1.4:   # wide news images: trim the sides so the art is bigger
+            nw = int(art.height * 1.33)
+            art = art.crop(((art.width - nw) // 2, 0, (art.width - nw) // 2 + nw, art.height))
+        box_h = ART_BOTTOM - ART_TOP
+        s = min(W / art.width, box_h / art.height)
+        art = art.resize((int(art.width * s), int(art.height * s)), Image.Resampling.LANCZOS)
         shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(shadow).rectangle([(W - art.width) // 2, top + 16, (W + art.width) // 2, top + art.height + 16],
-                                         fill=(0, 0, 0, 150))
-        bg = Image.alpha_composite(bg.convert("RGBA"), shadow.filter(ImageFilter.GaussianBlur(14)))
-        bg.paste(art.convert("RGBA"), ((W - art.width) // 2, top))
-    # soft purple wash behind the captions so they always read (stars still show through)
-    shade = tint_fade(W, H, ART_BOTTOM - 120, ART_BOTTOM + 140, max_alpha=150)
-    bg = Image.alpha_composite(bg.convert("RGBA"), shade)
-    (bg if layer_only else bg.convert("RGB")).save(path)
+        ImageDraw.Draw(shadow).rectangle(
+            [(W - art.width) // 2 + 10, ART_TOP + (box_h - art.height) // 2 + 14,
+             (W + art.width) // 2 + 10, ART_TOP + (box_h + art.height) // 2 + 14], fill=(0, 0, 0, 150))
+        bg = Image.alpha_composite(bg.convert("RGBA"), shadow.filter(ImageFilter.GaussianBlur(14))).convert("RGB")
+        bg.paste(art, ((W - art.width) // 2, ART_TOP + (box_h - art.height) // 2))
+    # darken behind the captions so they always read
+    shade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(shade)
+    for y in range(ART_BOTTOM - 40, H):
+        a = min(200, int(200 * (y - (ART_BOTTOM - 40)) / 160))
+        sd.line([(0, y), (W, y)], fill=(0, 0, 0, a))
+    bg = Image.alpha_composite(bg.convert("RGBA"), shade).convert("RGB")
+    bg.save(path)
 
 
 def render_tag(tag, path):
@@ -373,39 +303,26 @@ def _is_key(word):
         "NEW", "PSA", "RECORD", "MILLION", "FREE", "EXCLUSIVE", "RARE", "BREAKING", "CONFIRMED"}
 
 
-def _wrap(d, words, f, stroke, max_w):
-    lines, cur = [], []
-    for w in words:
-        if cur and text_w(d, " ".join(cur + [w]), f, stroke) > max_w:
-            lines.append(cur)
-            cur = []
-        cur.append(w)
-    if cur:
-        lines.append(cur)
-    return lines
-
-
 def render_caption(words, path):
-    """Up to ~5 words, HUGE, 1-2 lines across the bottom; yellow on numbers / key words."""
+    """1-3 words, huge, white with yellow on numbers / key words."""
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    words = [w.upper() for w in words]
-    for size in range(CAP_MAX_SIZE, 88, -6):
-        f, stroke = get_font(size), max(7, size // 13)
-        lines = _wrap(d, words, f, stroke, CAP_MAX_W)
-        if len(lines) <= 2 and all(text_w(d, " ".join(l), f, stroke) <= CAP_MAX_W for l in lines):
+    text = " ".join(w.upper() for w in words)
+    size = 150
+    while size > 80:
+        f = get_font(size)
+        if text_w(d, text, f, size // 14) <= CAP_MAX_W:
             break
-    line_h = int(size * 0.98)
-    y = min(CAP_CENTER_Y - (len(lines) * line_h) // 2, CAP_BOTTOM_LIMIT - len(lines) * line_h)
+        size -= 6
+    f, stroke = get_font(size), max(6, size // 14)
+    x = (W - text_w(d, text, f, stroke)) // 2
+    y = CAP_CENTER_Y - size // 2
     space = text_w(d, " ", f)
-    for ln in lines:
-        x = (W - text_w(d, " ".join(ln), f, stroke)) // 2
-        for w in ln:
-            d.text((x + 6, y + 8), w, font=f, fill="#000000", stroke_width=stroke, stroke_fill="#000000")
-            d.text((x, y), w, font=f, fill=YELLOW if _is_key(w) else WHITE,
-                   stroke_width=stroke, stroke_fill="#000000")
-            x += text_w(d, w, f, stroke) + space
-        y += line_h
+    for w in words:
+        w = w.upper()
+        d.text((x, y), w, font=f, fill=YELLOW if _is_key(w) else WHITE,
+               stroke_width=stroke, stroke_fill="#000000")
+        x += text_w(d, w, f, stroke) + space
     img.save(path)
 
 
@@ -414,7 +331,7 @@ def render_block(text, path):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     words = text.upper().split()
-    for size in range(CAP_MAX_SIZE - 20, 76, -6):
+    for size in range(150, 76, -6):
         f, stroke = get_font(size), max(6, size // 14)
         lines, cur = [], []
         for w in words:
@@ -427,7 +344,7 @@ def render_block(text, path):
         if len(lines) <= 3:
             break
     line_h = int(size * 1.0)
-    y = min(CAP_CENTER_Y - (len(lines) * line_h) // 2, CAP_BOTTOM_LIMIT - len(lines) * line_h)
+    y = CAP_CENTER_Y - (len(lines) * line_h) // 2 + 40
     space = text_w(d, " ", f)
     for ln in lines:
         x = (W - text_w(d, " ".join(ln), f, stroke)) // 2
@@ -439,7 +356,7 @@ def render_block(text, path):
     img.save(path)
 
 
-def chunk_words(words, max_words=5, max_chars=24):
+def chunk_words(words, max_words=3, max_chars=14):
     chunks, cur = [], []
     for w in words:
         chars = sum(len(c["w"]) + 1 for c in cur)
@@ -462,25 +379,13 @@ def make_bg_video(scene, idx, dur, zoom_in, extra_imgs, out):
     imgs = [scene["img_url"]] + [u for u in (extra_imgs or []) if u != scene["img_url"]]
     n = max(1, min(len(imgs), int(dur // CUT_EVERY)))
     parts, seg = [], dur / n
-    video = BG_MODE["video"] if BG_MODE["mode"] == "video" else None
     for k in range(n):
         png = f"v2_bg_{idx}_{k}.png"
-        render_background(dict(scene, img_url=imgs[k]), png, layer_only=bool(video))
-        part = f"v2_bgpart_{idx}_{k}.mp4"
-        if video:
-            # moving video behind the art (looped, offset per segment so it keeps flowing)
-            off = (idx * 4.0 + k * seg) % 20
-            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", "-1", "-ss", f"{off:.2f}", "-i", video,
-                            "-framerate", str(FPS), "-loop", "1", "-t", f"{seg:.3f}", "-i", png,
-                            "-filter_complex",
-                            f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},"
-                            f"eq=brightness=-0.06:saturation=1.15,setsar=1[v];[1]format=rgba[a];[v][a]overlay=0:0,format=yuv420p",
-                            "-t", f"{seg:.3f}", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", part], check=True)
-            parts.append(part)
-            continue
+        render_background(dict(scene, img_url=imgs[k]), png)
         frames = int(seg * FPS) + 1
         zi = (zoom_in + k) % 2 == 0
         z = f"1+0.08*on/{frames}" if zi else f"1.08-0.08*on/{frames}"
+        part = f"v2_bgpart_{idx}_{k}.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-loop", "1",
                         "-t", f"{seg:.3f}", "-i", png, "-vf",
                         f"scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps={FPS}",
@@ -660,29 +565,33 @@ def default_thumb(story):
     return words
 
 
-COVER_ART_TOP, COVER_ART_BOTTOM = 300, 1180
-
 def make_cover(story, path="cover.jpg"):
     """Clickbait cover: big art, dark vignette, huge 2-5 word hook. Key area kept inside the 4:5 grid crop."""
     text = story.get("thumb_text") or default_thumb(story)
     sc = story["scenes"][1] if story.get("topic") in ("bulk", "chase") and len(story["scenes"]) > 1 else story["scenes"][0]
     if story.get("topic") == "chase":
         sc = story["scenes"][-1]           # #1 most valuable card
-    img = (_photo_bg(BG_MODE["img"]) if BG_MODE["mode"] == "art" and BG_MODE["img"] else None) or galaxy(W, H)
+    img = Image.new("RGB", (W, H), BG)
     raw = load_image(sc["img_url"])
     if raw is not None:
-        art = big_art(raw, COVER_ART_BOTTOM - COVER_ART_TOP)
-        gx, gy = (W - art.width) // 2, COVER_ART_TOP + (COVER_ART_BOTTOM - COVER_ART_TOP - art.height) // 2
+        s_ = max(W / raw.width, H / raw.height)
+        cover = raw.resize((int(raw.width * s_) + 1, int(raw.height * s_) + 1), Image.Resampling.LANCZOS)
+        l, t = (cover.width - W) // 2, (cover.height - H) // 2
+        img = cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(18))
+        img = Image.blend(img, Image.new("RGB", (W, H), BG), 0.5)
+        art = raw.copy()
+        s_ = min(980 / art.width, 900 / art.height)
+        art = art.resize((int(art.width * s_), int(art.height * s_)), Image.Resampling.LANCZOS)
         glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-        ImageDraw.Draw(glow).rounded_rectangle([gx - 14, gy - 14, gx + art.width + 14, gy + art.height + 14],
+        gx, gy = (W - art.width) // 2, 820
+        ImageDraw.Draw(glow).rounded_rectangle([gx - 18, gy - 18, gx + art.width + 18, gy + art.height + 18],
                                                radius=30, fill=(255, 230, 0, 210))
         img = Image.alpha_composite(img.convert("RGBA"), glow.filter(ImageFilter.GaussianBlur(22))).convert("RGB")
         img.paste(art, (gx, gy))
     d = ImageDraw.Draw(img)
-    # hook text under the art, still inside the profile-grid crop
+    # hook text, top half of the 4:5 safe area
     words = text.split()
-    box_top, box_h = COVER_ART_BOTTOM + 30, 420
-    for size in range(210, 90, -10):
+    for size in range(230, 100, -10):
         f, stroke = get_font(size), max(8, size // 12)
         lines, cur = [], []
         for w in words:
@@ -691,9 +600,9 @@ def make_cover(story, path="cover.jpg"):
             cur.append(w)
         if cur:
             lines.append(cur)
-        if len(lines) <= 3 and len(lines) * size * 0.95 <= box_h:
+        if len(lines) <= 3 and len(lines) * size * 0.95 <= 560:
             break
-    y = box_top + (box_h - int(len(lines) * size * 0.95)) // 2
+    y = 250 + (560 - int(len(lines) * size * 0.95)) // 2
     for n, ln in enumerate(lines):
         line = " ".join(ln)
         x = (W - text_w(d, line, f, stroke)) // 2
@@ -706,8 +615,8 @@ def make_cover(story, path="cover.jpg"):
     tf = get_font(80)
     tw = text_w(d, tag, tf) + 80
     x = (W - tw) // 2
-    d.rounded_rectangle([x, 230, x + tw, 330], radius=16, fill=RED)
-    d.text((x + 40, 240), tag, font=tf, fill=WHITE)
+    d.rounded_rectangle([x, 140, x + tw, 240], radius=16, fill=RED)
+    d.text((x + 40, 150), tag, font=tf, fill=WHITE)
     img.save(path, quality=92)
     print(f"Cover: '{text}'")
     return path
@@ -722,11 +631,6 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
 
     script = build_script(story)
     voiced = wants_voice(story)
-    try:
-        pick_background(story)
-    except Exception as e:
-        print(f"Background pick failed ({e}) - using galaxy")
-        BG_MODE.update(mode="galaxy", video=None, img=None)
     print(f"Mode: {'VOICEOVER (' + VOICE + ')' if voiced else 'MUSIC ONLY'}  [topic={story.get('topic')}]")
     for i, x in enumerate(script):
         print(f"  {i+1}. say: {x['say']}  |  screen: {x['screen']}")

@@ -1440,10 +1440,18 @@ def load_image(url):
 
 def render_scene_layers(scene, bg_path, txt_path):
     """bg = artwork (gets the slow zoom), txt = text layer (stays sharp, fades in)."""
-    from galaxy import galaxy
-    bg = galaxy(W, H)                       # galaxy background, never black
+    bg = Image.new("RGB", (W, H), BG)
     raw = load_image(scene["img_url"])
     if raw is not None:
+        # blurred, darkened fill behind the art so wide/tall images never leave empty bars
+        cover = raw.copy()
+        scale = max(W / cover.width, IMG_BOTTOM / cover.height)
+        cover = cover.resize((int(cover.width * scale) + 1, int(cover.height * scale) + 1), Image.Resampling.LANCZOS)
+        left = (cover.width - W) // 2
+        top = (cover.height - IMG_BOTTOM) // 2
+        cover = cover.crop((left, top, left + W, top + IMG_BOTTOM)).filter(ImageFilter.GaussianBlur(28))
+        cover = Image.blend(cover, Image.new("RGB", cover.size, BG), 0.55)
+        bg.paste(cover, (0, 0))
 
         art = raw.copy()
         if scene.get("prices"):
@@ -1451,8 +1459,7 @@ def render_scene_layers(scene, bg_path, txt_path):
             art.thumbnail((600, IMG_BOTTOM - 120), Image.Resampling.LANCZOS)
             bg.paste(art, (40 + (600 - art.width) // 2, 60 + (IMG_BOTTOM - 120 - art.height) // 2))
         else:
-            from reel_v2 import big_art
-            art = big_art(art, IMG_BOTTOM - 70)
+            art.thumbnail((1000, IMG_BOTTOM - 70), Image.Resampling.LANCZOS)
             bg.paste(art, ((W - art.width) // 2, 40 + (IMG_BOTTOM - 70 - art.height) // 2))
 
     # real fade from the art into the dark text area (alpha composite, not solid lines)
@@ -1460,8 +1467,8 @@ def render_scene_layers(scene, bg_path, txt_path):
     fd = ImageDraw.Draw(fade)
     f_start = IMG_BOTTOM - 300
     for y in range(f_start, H):
-        a = 130 if y >= IMG_BOTTOM else int(130 * ((y - f_start) / 300) ** 1.4)
-        fd.line([(0, y), (W, y)], fill=(30, 12, 60, a))   # purple wash, stars still show
+        a = 255 if y >= IMG_BOTTOM else int(255 * ((y - f_start) / 300) ** 1.4)
+        fd.line([(0, y), (W, y)], fill=BG + (a,))
     bg = Image.alpha_composite(bg.convert("RGBA"), fade).convert("RGB")
     if scene.get("prices"):
         bg = draw_price_box(bg, scene["prices"])
@@ -1548,9 +1555,14 @@ def make_cover(story, out_path="cover.jpg"):
     topic = story.get("topic", "news")
     first = story["scenes"][0]
     raw = load_image(first["img_url"])
-    from galaxy import galaxy
-    base = galaxy(W, H)
+    base = Image.new("RGB", (W, H), BG)
     if raw is not None:
+        cover = raw.copy()
+        sc = max(W / cover.width, H / cover.height)
+        cover = cover.resize((int(cover.width * sc) + 1, int(cover.height * sc) + 1), Image.Resampling.LANCZOS)
+        l, t = (cover.width - W) // 2, (cover.height - H) // 2
+        base = Image.blend(cover.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(30)),
+                           Image.new("RGB", (W, H), BG), 0.45)
         art = raw.copy()
         art.thumbnail((880, 740), Image.Resampling.LANCZOS)
         ax, ay = (W - art.width) // 2, 390 + (740 - art.height) // 2
@@ -1563,8 +1575,8 @@ def make_cover(story, out_path="cover.jpg"):
     fade = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     fd = ImageDraw.Draw(fade)
     for y in range(1000, H):
-        a = min(150, int(150 * ((y - 1000) / 320) ** 1.2))
-        fd.line([(0, y), (W, y)], fill=(30, 12, 60, a))
+        a = min(255, int(255 * ((y - 1000) / 320) ** 1.2))
+        fd.line([(0, y), (W, y)], fill=BG + (a,))
     base = Image.alpha_composite(base.convert("RGBA"), fade)
     d = ImageDraw.Draw(base)
 
@@ -1641,8 +1653,7 @@ def pick_cta_image():
     return None
 
 def make_cta_slide(out_path="f_cta.png"):
-    from galaxy import galaxy
-    base = galaxy(W, H)
+    base = Image.new("RGB", (W, H), BG)
     cta_img = pick_cta_image()
     if cta_img is not None:
         cta_img = cta_img.resize((W, round(cta_img.height * W / cta_img.width)), Image.Resampling.LANCZOS)
