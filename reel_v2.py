@@ -56,7 +56,7 @@ CAP_MAX_SIZE = 190
 # Background behind the art (Oct 16, Joe: Pokemon backgrounds + videos, not only galaxy).
 # One choice per Reel: "video" (Poke Ball / Pokemon-style or store clip from clips/library.json),
 # "art" (the story's own Pokemon pictures, full screen) or "galaxy". Force with repo variable REEL_BG.
-BG_MODE = {"mode": "galaxy", "video": None, "img": None}
+BG_MODE = {"mode": "galaxy", "video": None, "img": None, "imgs": []}
 FPS = 30
 
 
@@ -282,13 +282,15 @@ def pick_background(story):
     the story's own pictures and the galaxy."""
     forced = os.getenv("REEL_BG", "").strip().lower()
     text = " ".join([story.get("context", "")] + [s.get("text", "") for s in story.get("scenes", [])])
-    imgs = [u for u in ([s.get("img_url") for s in story.get("scenes", [])] + list(story.get("image_pool") or [])) if u]
+    # the article's own Pokemon pictures first, then the story's picture pool and scene art
+    imgs = list(dict.fromkeys(u for u in (list(story.get("article_images") or []) + list(story.get("image_pool") or [])
+                                          + [s.get("img_url") for s in story.get("scenes", [])]) if u))
     try:
         from drops_reel import library_background
     except Exception as e:
         print(f"Background library unavailable ({e})")
         library_background = None
-    mode = forced if forced in ("video", "art", "galaxy") else random.choices(["video", "art", "galaxy"], [45, 30, 25])[0]
+    mode = forced if forced in ("video", "art", "galaxy") else random.choices(["video", "art", "galaxy"], [30, 60, 10])[0]
     if library_background and forced in ("", "video"):
         store = library_background(text)                         # Target / Walmart / Best Buy footage
         if store:
@@ -304,8 +306,8 @@ def pick_background(story):
             return
         mode = "art"
     if mode == "art" and imgs:
-        BG_MODE.update(mode="art", img=random.choice(imgs[1:] or imgs))
-        print(f"Background: story picture {BG_MODE['img']}")
+        BG_MODE.update(mode="art", img=random.choice(imgs[1:] or imgs), imgs=imgs)
+        print(f"Background: story pictures ({len(imgs)} to rotate)")
         return
     BG_MODE.update(mode="galaxy")
     print("Background: galaxy")
@@ -328,7 +330,16 @@ def render_background(scene, path, layer_only=False):
     if layer_only:
         bg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     else:
-        bg = (_photo_bg(BG_MODE["img"]) if BG_MODE["mode"] == "art" and BG_MODE["img"] else None) or galaxy(W, H)
+        bg = None
+        if BG_MODE["mode"] == "art" and BG_MODE["img"]:
+            # a different Pokemon picture from the story behind each scene (not the one shown on top)
+            pool = [u for u in BG_MODE.get("imgs") or [] if u != scene.get("img_url")] or [BG_MODE["img"]]
+            pick = pool[sum(map(ord, str(scene.get("img_url", "")))) % len(pool)]
+            try:
+                bg = _photo_bg(pick)
+            except Exception as e:
+                print(f"Background picture failed ({e})")
+        bg = bg or galaxy(W, H)
     raw = load_image(scene["img_url"])
     if raw is not None:
         # sharp art, full width and as tall as the art zone allows
