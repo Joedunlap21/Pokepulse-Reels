@@ -917,11 +917,13 @@ def _fetch_library_clip(entry):
     return None
 
 
-def library_background(text, general=False):
-    """Store clip when the post names Target / Walmart / Best Buy (case-sensitive), else (general=True) a Pokemon clip."""
+def library_background(text, general=False, kinds=None):
+    """Store clip when the post names Target / Walmart / Best Buy (case-sensitive), else (general=True) a
+    general background: Pokemon-style, space, sparkle or meadow clips (kinds= narrows it, e.g. ["store"])."""
     lib = _library()
     if general:
-        pool = [e for e in lib if not e.get("keywords")]
+        want = set(kinds or ["pokemon", "space", "sparkle", "meadow"])
+        pool = [e for e in lib if not e.get("keywords") and e.get("kind", "pokemon") in want]
     else:
         hits = {}
         for e in lib:
@@ -952,6 +954,9 @@ def pick_own_background(story, source):
     raw = " ".join([source, story.get("product_name", ""), story.get("set_name", ""), story.get("topic", "")])
     text = _norm(raw)
     if not files:
+        if story.get("topic") in ("drops", "sales") and random.random() < 0.5:
+            return library_background(raw) or library_background(raw, general=True, kinds=["store"]) \
+                or library_background(raw, general=True)
         return library_background(raw) or library_background(raw, general=True)
     def score(path):
         words = [w for w in re.split(r"[^a-z0-9]+", os.path.splitext(os.path.basename(path))[0].lower())
