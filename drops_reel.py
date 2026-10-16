@@ -34,18 +34,18 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 W, H, FPS = 1080, 1920, 30
 
 # ---- look & feel (matched to the reference reels) ----
-CAPTION_Y = 0.75           # caption block centre (fraction of height) - lower third, under the products
-CAPTION_SIZE = 94
-CAPTION_MAX_W = 900
-WORDS_PER_CHUNK = 3
+CAPTION_Y = 0.79           # caption block centre (fraction of height) - big text across the bottom
+CAPTION_SIZE = 132
+CAPTION_MAX_W = 1000
+WORDS_PER_CHUNK = 4
 YELLOW = (255, 232, 20)
 WHITE = (255, 255, 255)
 PRICE_GREEN = (52, 230, 64)
 LOGO_Y = 0.15
 LOGO_MAX_W = 0.72 * W
 LOGO_MAX_H = 0.13 * H
-PRODUCT_CY = 0.45
-PRODUCT_BOX = (0.98 * W, 0.50 * H)   # products fill the middle of the screen
+PRODUCT_CY = 0.42
+PRODUCT_BOX = (0.98 * W, 0.46 * H)   # products fill the middle of the screen
 WHIP = 0.24                # seconds for whip-in transitions
 MUSIC_VOLUME = 0.32          # music bed under the voice (0.14 measured ~30 dB under the voice = basically silent)
 
@@ -181,7 +181,7 @@ def render_caption(chunk, active_idx):
         return _cap_cache[key]
     toks = [re.sub(r"[^\w$%'.&+-]", "", w[0]).strip(".").upper() or w[0].upper() for w in chunk]
     space = -36  # glyph images carry padding
-    for size in (CAPTION_SIZE, 80, 68):      # shrink long words so it stays on 2 lines
+    for size in (CAPTION_SIZE, 112, 96, 80):  # shrink long words so it stays on 2 lines
         imgs = [stroked_text(t, size, YELLOW if i == active_idx else WHITE) for i, t in enumerate(toks)]
         lines, line, lw = [], [], 0
         for im in imgs:

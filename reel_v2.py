@@ -45,11 +45,18 @@ MUSIC_VOLUME = 0.14                                      # music under the voice
 
 # Instagram covers the top ~220px and bottom ~420px (username, caption, buttons) and the right edge.
 # Oct 16: art made much bigger (full width, ~60% of the screen) and captions moved lower.
-ART_TOP, ART_BOTTOM = 270, 1400
-TAG_Y = 200
-CAP_CENTER_Y = 1475
-CAP_BOTTOM_LIMIT = 1660   # keep multi-line text above IG's caption/username area
-CAP_MAX_W = 900
+ART_TOP, ART_BOTTOM = 260, 1330
+TAG_Y = 190
+# Oct 16 (Joe): captions much bigger, up to 2 lines, filling the bottom of the screen
+CAP_CENTER_Y = 1560
+CAP_BOTTOM_LIMIT = 1790
+CAP_MAX_W = 1010
+CAP_MAX_SIZE = 190
+
+# Background behind the art (Oct 16, Joe: Pokemon backgrounds + videos, not only galaxy).
+# One choice per Reel: "video" (Poke Ball / Pokemon-style or store clip from clips/library.json),
+# "art" (the story's own Pokemon pictures, full screen) or "galaxy". Force with repo variable REEL_BG.
+BG_MODE = {"mode": "galaxy", "video": None, "img": None}
 FPS = 30
 
 
@@ -270,8 +277,58 @@ def big_art(raw, box_h, box_w=W):
     return art.resize((max(1, int(art.width * s)), max(1, int(art.height * s))), Image.Resampling.LANCZOS)
 
 
-def render_background(scene, path):
-    bg = galaxy(W, H)                       # galaxy background, never black
+def pick_background(story):
+    """Choose this Reel's background: store clip if a store is named, else a mix of Pokemon videos,
+    the story's own pictures and the galaxy."""
+    forced = os.getenv("REEL_BG", "").strip().lower()
+    text = " ".join([story.get("context", "")] + [s.get("text", "") for s in story.get("scenes", [])])
+    imgs = [u for u in ([s.get("img_url") for s in story.get("scenes", [])] + list(story.get("image_pool") or [])) if u]
+    try:
+        from drops_reel import library_background
+    except Exception as e:
+        print(f"Background library unavailable ({e})")
+        library_background = None
+    mode = forced if forced in ("video", "art", "galaxy") else random.choices(["video", "art", "galaxy"], [45, 30, 25])[0]
+    if library_background and forced in ("", "video"):
+        store = library_background(text)                         # Target / Walmart / Best Buy footage
+        if store:
+            BG_MODE.update(mode="video" if store.lower().endswith((".mp4", ".mov", ".m4v")) else "art",
+                           video=store, img=store)
+            print(f"Background: store {store}")
+            return
+    if mode == "video" and library_background:
+        clip = library_background(text, general=True)           # Poke Ball / Pokemon-style clips
+        if clip and clip.lower().endswith((".mp4", ".mov", ".m4v")):
+            BG_MODE.update(mode="video", video=clip)
+            print(f"Background: video {clip}")
+            return
+        mode = "art"
+    if mode == "art" and imgs:
+        BG_MODE.update(mode="art", img=random.choice(imgs[1:] or imgs))
+        print(f"Background: story picture {BG_MODE['img']}")
+        return
+    BG_MODE.update(mode="galaxy")
+    print("Background: galaxy")
+
+
+def _photo_bg(src):
+    """Full-screen picture background: sharp, slightly dimmed, purple tint (never black)."""
+    raw = Image.open(src).convert("RGB") if os.path.exists(str(src)) else load_image(src)
+    if raw is None:
+        return None
+    s = max(W / raw.width, H / raw.height)
+    cov = raw.resize((int(raw.width * s) + 1, int(raw.height * s) + 1), Image.Resampling.LANCZOS)
+    l, t = (cov.width - W) // 2, (cov.height - H) // 2
+    cov = cov.crop((l, t, l + W, t + H)).filter(ImageFilter.GaussianBlur(4))
+    return Image.blend(cov, Image.new("RGB", (W, H), (40, 16, 80)), 0.35)
+
+
+def render_background(scene, path, layer_only=False):
+    """layer_only=True -> transparent PNG (art + caption wash) to lay over a background video."""
+    if layer_only:
+        bg = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    else:
+        bg = (_photo_bg(BG_MODE["img"]) if BG_MODE["mode"] == "art" and BG_MODE["img"] else None) or galaxy(W, H)
     raw = load_image(scene["img_url"])
     if raw is not None:
         # sharp art, full width and as tall as the art zone allows
@@ -280,12 +337,12 @@ def render_background(scene, path):
         shadow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
         ImageDraw.Draw(shadow).rectangle([(W - art.width) // 2, top + 16, (W + art.width) // 2, top + art.height + 16],
                                          fill=(0, 0, 0, 150))
-        bg = Image.alpha_composite(bg.convert("RGBA"), shadow.filter(ImageFilter.GaussianBlur(14))).convert("RGB")
-        bg.paste(art, ((W - art.width) // 2, top))
+        bg = Image.alpha_composite(bg.convert("RGBA"), shadow.filter(ImageFilter.GaussianBlur(14)))
+        bg.paste(art.convert("RGBA"), ((W - art.width) // 2, top))
     # soft purple wash behind the captions so they always read (stars still show through)
-    shade = tint_fade(W, H, ART_BOTTOM - 120, ART_BOTTOM + 140, max_alpha=120)
-    bg = Image.alpha_composite(bg.convert("RGBA"), shade).convert("RGB")
-    bg.save(path)
+    shade = tint_fade(W, H, ART_BOTTOM - 120, ART_BOTTOM + 140, max_alpha=150)
+    bg = Image.alpha_composite(bg.convert("RGBA"), shade)
+    (bg if layer_only else bg.convert("RGB")).save(path)
 
 
 def render_tag(tag, path):
@@ -305,26 +362,39 @@ def _is_key(word):
         "NEW", "PSA", "RECORD", "MILLION", "FREE", "EXCLUSIVE", "RARE", "BREAKING", "CONFIRMED"}
 
 
+def _wrap(d, words, f, stroke, max_w):
+    lines, cur = [], []
+    for w in words:
+        if cur and text_w(d, " ".join(cur + [w]), f, stroke) > max_w:
+            lines.append(cur)
+            cur = []
+        cur.append(w)
+    if cur:
+        lines.append(cur)
+    return lines
+
+
 def render_caption(words, path):
-    """1-3 words, huge, white with yellow on numbers / key words."""
+    """Up to ~5 words, HUGE, 1-2 lines across the bottom; yellow on numbers / key words."""
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    text = " ".join(w.upper() for w in words)
-    size = 150
-    while size > 80:
-        f = get_font(size)
-        if text_w(d, text, f, size // 14) <= CAP_MAX_W:
+    words = [w.upper() for w in words]
+    for size in range(CAP_MAX_SIZE, 88, -6):
+        f, stroke = get_font(size), max(7, size // 13)
+        lines = _wrap(d, words, f, stroke, CAP_MAX_W)
+        if len(lines) <= 2 and all(text_w(d, " ".join(l), f, stroke) <= CAP_MAX_W for l in lines):
             break
-        size -= 6
-    f, stroke = get_font(size), max(6, size // 14)
-    x = (W - text_w(d, text, f, stroke)) // 2
-    y = CAP_CENTER_Y - size // 2
+    line_h = int(size * 0.98)
+    y = min(CAP_CENTER_Y - (len(lines) * line_h) // 2, CAP_BOTTOM_LIMIT - len(lines) * line_h)
     space = text_w(d, " ", f)
-    for w in words:
-        w = w.upper()
-        d.text((x, y), w, font=f, fill=YELLOW if _is_key(w) else WHITE,
-               stroke_width=stroke, stroke_fill="#000000")
-        x += text_w(d, w, f, stroke) + space
+    for ln in lines:
+        x = (W - text_w(d, " ".join(ln), f, stroke)) // 2
+        for w in ln:
+            d.text((x + 6, y + 8), w, font=f, fill="#000000", stroke_width=stroke, stroke_fill="#000000")
+            d.text((x, y), w, font=f, fill=YELLOW if _is_key(w) else WHITE,
+                   stroke_width=stroke, stroke_fill="#000000")
+            x += text_w(d, w, f, stroke) + space
+        y += line_h
     img.save(path)
 
 
@@ -333,7 +403,7 @@ def render_block(text, path):
     img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     words = text.upper().split()
-    for size in range(150, 76, -6):
+    for size in range(CAP_MAX_SIZE - 20, 76, -6):
         f, stroke = get_font(size), max(6, size // 14)
         lines, cur = [], []
         for w in words:
@@ -358,7 +428,7 @@ def render_block(text, path):
     img.save(path)
 
 
-def chunk_words(words, max_words=3, max_chars=14):
+def chunk_words(words, max_words=5, max_chars=24):
     chunks, cur = [], []
     for w in words:
         chars = sum(len(c["w"]) + 1 for c in cur)
@@ -381,13 +451,25 @@ def make_bg_video(scene, idx, dur, zoom_in, extra_imgs, out):
     imgs = [scene["img_url"]] + [u for u in (extra_imgs or []) if u != scene["img_url"]]
     n = max(1, min(len(imgs), int(dur // CUT_EVERY)))
     parts, seg = [], dur / n
+    video = BG_MODE["video"] if BG_MODE["mode"] == "video" else None
     for k in range(n):
         png = f"v2_bg_{idx}_{k}.png"
-        render_background(dict(scene, img_url=imgs[k]), png)
+        render_background(dict(scene, img_url=imgs[k]), png, layer_only=bool(video))
+        part = f"v2_bgpart_{idx}_{k}.mp4"
+        if video:
+            # moving video behind the art (looped, offset per segment so it keeps flowing)
+            off = (idx * 4.0 + k * seg) % 20
+            subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-stream_loop", "-1", "-ss", f"{off:.2f}", "-i", video,
+                            "-framerate", str(FPS), "-loop", "1", "-t", f"{seg:.3f}", "-i", png,
+                            "-filter_complex",
+                            f"[0:v]scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},fps={FPS},"
+                            f"eq=brightness=-0.06:saturation=1.15,setsar=1[v];[1]format=rgba[a];[v][a]overlay=0:0,format=yuv420p",
+                            "-t", f"{seg:.3f}", "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", part], check=True)
+            parts.append(part)
+            continue
         frames = int(seg * FPS) + 1
         zi = (zoom_in + k) % 2 == 0
         z = f"1+0.08*on/{frames}" if zi else f"1.08-0.08*on/{frames}"
-        part = f"v2_bgpart_{idx}_{k}.mp4"
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(FPS), "-loop", "1",
                         "-t", f"{seg:.3f}", "-i", png, "-vf",
                         f"scale=2160:3840,zoompan=z='{z}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s={W}x{H}:fps={FPS}",
@@ -575,7 +657,7 @@ def make_cover(story, path="cover.jpg"):
     sc = story["scenes"][1] if story.get("topic") in ("bulk", "chase") and len(story["scenes"]) > 1 else story["scenes"][0]
     if story.get("topic") == "chase":
         sc = story["scenes"][-1]           # #1 most valuable card
-    img = galaxy(W, H)
+    img = (_photo_bg(BG_MODE["img"]) if BG_MODE["mode"] == "art" and BG_MODE["img"] else None) or galaxy(W, H)
     raw = load_image(sc["img_url"])
     if raw is not None:
         art = big_art(raw, COVER_ART_BOTTOM - COVER_ART_TOP)
@@ -629,6 +711,11 @@ def compile_voiced_reel(story, output_mp4="pokepulse_reel.mp4"):
 
     script = build_script(story)
     voiced = wants_voice(story)
+    try:
+        pick_background(story)
+    except Exception as e:
+        print(f"Background pick failed ({e}) - using galaxy")
+        BG_MODE.update(mode="galaxy", video=None, img=None)
     print(f"Mode: {'VOICEOVER (' + VOICE + ')' if voiced else 'MUSIC ONLY'}  [topic={story.get('topic')}]")
     for i, x in enumerate(script):
         print(f"  {i+1}. say: {x['say']}  |  screen: {x['screen']}")
