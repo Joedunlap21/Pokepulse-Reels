@@ -282,6 +282,7 @@ def parse_article(src, url, rss_date=None):
     title = re.split(r"\s+[|\-–]\s+(?:PokeBeach|PokeGuardian|Pokemon\.com|Dexerto|Siliconera|ONE PIECE CARD GAME)", title)[0].strip()
     # hook text: drop markdown "#" and site tags like "[One Piece Card Game]" at the start of titles
     title = re.sub(r"^(?:#+\s*|\[[^\]]{2,40}\]\s*)+", "", title).strip()
+    title = re.sub(r"\s*TOPICS\s*ONE PIECE CARD GAME.*$", "", title, flags=re.I).strip()   # official site page-title tail
 
     desc = clean_text((meta_all(page, "og:description") or [""])[0])
 
