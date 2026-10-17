@@ -183,7 +183,10 @@ NOT_COLLECTOR = ["deck list", "decklist", "deck profile", "deck guide", "regiona
                  "world championships", "tournament report", "top 8", "top cut", "meta", "standard format",
                  "rotation", "strategy", "matchup", "tier list", "carpe diem", "here, and i am", "writing another article",
                  "pokemon tcg live", "pokemon go", "pokemon unite", "video game", "anime episode",
-                 "pokopia", "prime day"]
+                 "pokopia", "prime day",
+                 # company stock / finance pieces (Oct 16: a Bandai Namco stock analysis posted as One Piece news)
+                 "fundamental analysis", "stock price", "share price", "shareholders", "earnings report",
+                 "fiscal year", "operating profit", "net sales"]
 
 JUNK = ["open media", "tap to unmute", "follow along with the video", "this feature may not be available",
         "launched pokebeach", "is a fansite", "follow us", "thank you very much", "patreon", "subscribe",
@@ -277,6 +280,8 @@ def parse_article(src, url, rss_date=None):
     if og_t and (not title or len(title) > 160):
         title = clean_text(og_t[0])
     title = re.split(r"\s+[|\-–]\s+(?:PokeBeach|PokeGuardian|Pokemon\.com|Dexerto|Siliconera|ONE PIECE CARD GAME)", title)[0].strip()
+    # hook text: drop markdown "#" and site tags like "[One Piece Card Game]" at the start of titles
+    title = re.sub(r"^(?:#+\s*|\[[^\]]{2,40}\]\s*)+", "", title).strip()
 
     desc = clean_text((meta_all(page, "og:description") or [""])[0])
 
