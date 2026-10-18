@@ -285,6 +285,10 @@ def parse_article(src, url, rss_date=None):
     title = re.sub(r"\s*TOPICS\s*ONE PIECE CARD GAME.*$", "", title, flags=re.I).strip()   # official site page-title tail
 
     desc = clean_text((meta_all(page, "og:description") or [""])[0])
+    # site-wide boilerplate (official One Piece site: "The official ONE PIECE Card Game website. Find ...")
+    # isn't about the story; it was becoming the caption's 2nd line / first spoken fact
+    if re.match(r"(?:this is )?the official .{0,40}(?:card game|tcg)? ?web ?site", desc, re.I):
+        desc = ""
 
     published = rss_date
     for cand in meta_all(page, "article:published_time") + re.findall(r'"datePublished"\s*:\s*"([^"]+)"', page) \
