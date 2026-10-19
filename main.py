@@ -184,6 +184,8 @@ NOT_COLLECTOR = ["deck list", "decklist", "deck profile", "deck guide", "regiona
                  "rotation", "strategy", "matchup", "tier list", "carpe diem", "here, and i am", "writing another article",
                  "pokemon tcg live", "pokemon go", "pokemon unite", "video game", "anime episode",
                  "pokopia", "prime day",
+                 # fan-made / browser video games (Oct 18 8pm: "PokeBonk" fan game posted as card news)
+                 "fan game", "fan-made game", "fangame", "browser game", "megabonk",
                  # company stock / finance pieces (Oct 16: a Bandai Namco stock analysis posted as One Piece news)
                  "fundamental analysis", "stock price", "share price", "shareholders", "earnings report",
                  "fiscal year", "operating profit", "net sales"]
@@ -443,13 +445,20 @@ def build_article_story(art, kind):
     if not details:
         return None
     imgs = art["images"]
-    scenes = [{"tag": first_tag, "img_url": imgs[0], "text": art["title"].upper(),
+    hook = op_hook_title(art["title"]) if kind == "onepiece" else art["title"]
+    scenes = [{"tag": first_tag, "img_url": imgs[0], "text": hook.upper(),
                "colors": [YELLOW, WHITE], "sub": "POKEPULSE EXCLUSIVE"}]
     for i, s in enumerate(details):
         scenes.append({"tag": tags[i], "img_url": imgs[(i + 1) % len(imgs)], "text": s.upper(),
                        "colors": [WHITE, YELLOW] if i % 2 == 0 else [YELLOW, WHITE]})
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
             "caption_full": article_caption(art, sents, onepiece=(kind == "onepiece"))}
+
+def op_hook_title(title):
+    """Official One Piece titles start with 'ONE PIECE CARD GAME ...'; the Reel tag and caption lead
+    already say ONE PIECE TCG, so the hook read 'ONE PIECE TCG: ONE PIECE CARD GAME Development Team
+    Letter' (Oct 18). Drop the repeated prefix when at least 2 words remain."""
+    return re.sub(r"^ONE PIECE CARD GAME\s*[:\-–]?\s+(?=\S+\s+\S+)", "", title, flags=re.I).strip()
 
 def article_caption(art, sents, lead="🚨", onepiece=False):
     text = ""
@@ -460,7 +469,8 @@ def article_caption(art, sents, lead="🚨", onepiece=False):
     tags = ("#OnePieceTCG #OnePieceCardGame #OPTCG #OnePiece #CardStax #TCGNews" if onepiece else
             "#PokemonCards #PokemonTCG #CardStax #PokemonReels #PokePulse #PokemonNews")
     lead = "🏴‍☠️ ONE PIECE TCG:" if onepiece else lead
-    return (f"{lead} {art['title']}\n\n{text}\n\nSource: {art['source']}\n\n{tags}")
+    title = op_hook_title(art["title"]) if onepiece else art["title"]
+    return (f"{lead} {title}\n\n{text}\n\nSource: {art['source']}\n\n{tags}")
 
 # ---------------------------------------------------------------- topic: drops
 
