@@ -8,7 +8,7 @@ on:
         required: false
         default: ''
         type: choice
-        options: ['', 'drops', 'news', 'onepiece', 'sales', 'inside', 'chase', 'mover', 'guess', 'binder']
+        options: ['', 'drops', 'news', 'onepiece', 'games', 'funfact', 'sales', 'inside', 'chase', 'mover', 'guess', 'binder']
       voice_mode:
         description: 'Voiceover: on = always (default), auto = only the 5:30pm post, off = music only'
         required: false

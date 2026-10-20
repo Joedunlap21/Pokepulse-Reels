@@ -145,13 +145,13 @@ ONEPIECE_SOURCES = [
     {"name": "One Piece Card Game", "list": "https://en.onepiece-cardgame.com/topics/",
      "base": "https://en.onepiece-cardgame.com",
      "link_re": r'href="((?:https://en\.onepiece-cardgame\.com)?/topics/[^"#?]*?\d[^"#?]*)"',
-     "start": "<main", "end": ["</main>"]},
+     "start": "<main", "end": ["</main>"], "max_imgs": 8},
     {"name": "Siliconera", "rss": "https://www.siliconera.com/tag/one-piece-card-game/feed/",
-     "base": "https://www.siliconera.com", "start": "<article", "end": ["</article>"], "max_imgs": 3},
+     "base": "https://www.siliconera.com", "start": "<article", "end": ["</article>"], "max_imgs": 5},
     {"name": "Dexerto", "rss": "https://www.dexerto.com/feed/tag/one-piece-card-game/", "base": "https://www.dexerto.com",
      "start": "<article", "end": ["</article>"], "max_imgs": 2},
     {"name": "Bing News", "rss": "https://www.bing.com/news/search?q=%22One+Piece+Card+Game%22&format=rss",
-     "base": "", "start": "<article", "end": ["</article>"], "max_imgs": 3},
+     "base": "", "start": "<article", "end": ["</article>"], "max_imgs": 5},
 ]
 ONEPIECE_CANDIDATES = [   # only used by sources_check.py to test new outlets
     {"name": "Dexerto (one-piece tag)", "rss": "https://www.dexerto.com/feed/tag/one-piece/", "base": "https://www.dexerto.com",
@@ -336,7 +336,7 @@ def parse_article(src, url, rss_date=None):
         images.append(u)
 
     art = {"source": src["name"], "url": url, "title": title, "desc": desc, "paras": paras,
-           "items": items, "images": images[:src.get("max_imgs", 4)], "published": published}
+           "items": items, "images": images[:src.get("max_imgs", 6)], "published": published}
     _article_cache[url] = art
     return art
 
@@ -398,6 +398,10 @@ def gather_articles(sources=None, franchise="pokemon"):
             if franchise == "onepiece":
                 if "one piece" not in low or word_hits(blob, OP_WORDS) == 0:
                     continue  # must be about the One Piece CARD game
+            elif franchise == "games":
+                from extra_formats import is_game_story
+                if not is_game_story(a):
+                    continue  # Pokemon video game news only
             elif word_hits(blob, TCG_WORDS) == 0:
                 continue  # skip non-card stuff (Pokemon GO events, video games...)
             a["franchise"] = franchise
@@ -1271,6 +1275,12 @@ ENGAGE = {   # topic: (comment ask, share ask, spoken ask added to the end of th
                "📲 Send this to the friend who needs to see this",
                "Would you pay that? Comment below and send this to a friend!"),
 }
+ENGAGE["games"] = ("Are you playing this? Comment YES or NO 👇",
+                   "📲 Send this to the friend you play Pokémon with",
+                   "Are you playing? Comment below, and send this to a friend you play with!")
+ENGAGE["funfact"] = ("Did you know that one? Comment ✅ or ❌ 👇",
+                     "📲 Send this to your biggest Pokémon fan friend",
+                     "Did you know that? Comment below, and send this to a Pokemon fan!")
 DEFAULT_ENGAGE = ("What do you think? Comment below 👇", "📲 Send this to a friend who collects", None)
 FOLLOW_LINE = "🔔 Follow for daily Pokémon & One Piece card news, drops & big sales"
 NEWSLETTER_LINE = "📬 Free Poké Pulse newsletter: link in bio"
@@ -1308,7 +1318,7 @@ def finish_caption(cap, topic=None):
 
 # ---------------------------------------------------------------- topic picker
 
-TOPICS = ["drops", "sales", "inside", "news", "onepiece", "chase", "mover", "guess", "binder"]
+TOPICS = ["drops", "sales", "inside", "news", "onepiece", "games", "funfact", "chase", "mover", "guess", "binder"]
 
 # Daily lineup (Oct 14): card-ranking formats got no views, so it's voiced NEWS Reels now.
 # Times are the Google Apps Script timer slots (ET):
@@ -1319,7 +1329,10 @@ TOPICS = ["drops", "sales", "inside", "news", "onepiece", "chase", "mover", "gue
 #   8:00pm  news     - Pokemon TCG news
 #  10:00pm  onepiece - One Piece Card Game news
 # Card formats (mover, guess, binder, chase) still work when run by hand from the Actions page.
-NEWS_TOPICS = ("news", "onepiece", "sales")   # different story every time, so they can repeat in a day
+# Oct 20 (Joe): minimum 6 posts a day - news, drops, One Piece, games, character fun facts.
+#   6:30am drops · 11:30am news · 3:30pm onepiece · 5:30pm games · 8pm funfact · 10pm news
+# Any slot with nothing new falls back down the list; "funfact" never runs dry, so no slot skips.
+NEWS_TOPICS = ("news", "onepiece", "sales", "games", "funfact")   # different story every time, so they can repeat in a day
 
 def topic_for_now():
     forced = os.getenv("REEL_TOPIC", "").strip().lower()
@@ -1341,10 +1354,10 @@ def topic_for_now():
     if 14 <= h <= 16:
         return "onepiece"
     if 17 <= h <= 18:
-        return "sales"
+        return "games"
     if 19 <= h <= 20:
-        return "news"
-    return "onepiece"
+        return "funfact"
+    return "news"
 
 def build_story():
     posted = set()
@@ -1358,11 +1371,12 @@ def build_story():
     done = formats_posted_today() - set(NEWS_TOPICS)
     if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes") and os.getenv("REEL_TOPIC", "").strip():
         done = set()   # test runs build the requested format even if it already posted today
-    backups = ["news", "onepiece", "inside", "drops", "sales"]
+    backups = ["news", "onepiece", "games", "drops", "sales", "inside", "funfact"]   # funfact last: never empty
     order = [t for t in [first] + backups if t not in done]
     order = list(dict.fromkeys(order)) or [first]
     articles = None
     op_articles = None
+    game_articles = None
 
     for topic in order:
         print(f"--- Trying topic: {topic}")
@@ -1389,6 +1403,38 @@ def build_story():
             if story:
                 story["topic"] = topic
                 return story
+            continue
+        if topic == "funfact":
+            try:
+                from extra_formats import build_funfact_story
+                story = build_funfact_story(posted, captions)
+            except Exception as e:
+                print("Fun fact failed:", e)
+                story = None
+            if story:
+                return story
+            continue
+        if topic == "games":
+            if game_articles is None:
+                from extra_formats import GAMES_SOURCES
+                game_articles = gather_articles(GAMES_SOURCES, franchise="games")
+                print(f"{len(game_articles)} recent Pokemon game articles found")
+            from extra_formats import build_games_story
+            for art in game_articles:
+                if already_posted(art["title"], posted, captions):
+                    continue
+                story = build_games_story(art)
+                if story:
+                    print(f"Picked [games] {art['source']}: {art['title']}")
+                    story["topic"] = "games"
+                    story["article_images"] = list(art["images"])
+                    story["context"] = art["title"] + ". " + " ".join(all_sentences(art)[:12])
+                    try:
+                        from story_images import enrich
+                        enrich(story)
+                    except Exception as e:
+                        print(f"Story pictures failed ({e}) - using article photos")
+                    return story
             continue
         if topic == "inside":
             story = build_gallery_inside_story(captions, posted)
@@ -1437,7 +1483,7 @@ def build_story():
                     vary_images(story, art)
                 except Exception as e:
                     print(f"Couldn't add extra images ({e})")
-                if topic in ("news", "sales"):
+                if topic in ("news", "sales", "onepiece"):
                     try:                          # pictures of the people / places / Pokemon each slide mentions
                         from story_images import enrich
                         enrich(story)
@@ -1450,6 +1496,10 @@ def build_story():
 
 def load_image(url):
     try:
+        if url and os.path.exists(url):        # local picture (e.g. visuals.py close-up crops)
+            im = Image.open(url)
+            im.load()
+            return im.convert("RGB")
         data = requests.get(url, headers=API_HEADERS, timeout=15).content
         with open("temp_raw", "wb") as f:
             f.write(data)
@@ -1921,6 +1971,12 @@ if __name__ == "__main__":
 
     add_spoken_ask(story)
     print(f"Producing Reel: {story['story_id']}")
+    try:                                   # Oct 20: at least 3 different visuals per Reel, 5+ when possible
+        from visuals import ensure_visuals, count_visuals
+        ensure_visuals(story)
+        print(f"Visuals in this Reel: {count_visuals(story)}")
+    except Exception as e:
+        print(f"Visual top-up failed ({e}) - using the story's own pictures")
     mp4_file = None
     # Drops get the drop-alert format (drops_reel.py). Set repo variable DROPS_STYLE=classic to turn it off.
     if story.get("topic") in ("drops", "inside") and \

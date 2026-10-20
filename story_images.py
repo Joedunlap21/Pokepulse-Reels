@@ -125,6 +125,8 @@ def enrich(story):
             name, typ = str(e.get("name", "")).strip(), str(e.get("type", "")).lower()
             if not name:
                 continue
+            if typ in ("pokemon", "card") and story.get("topic") == "onepiece":
+                continue                      # never Pokemon art on a One Piece Reel
             if typ in ("pokemon", "card"):
                 got = pokemon_image(name.split(" ex")[0] if typ == "pokemon" else name, 2)
             else:

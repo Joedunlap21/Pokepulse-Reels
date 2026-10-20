@@ -105,6 +105,8 @@ def ai_script(story):
     facts = [sc["text"] + (f" ({sc['sub']})" if sc.get("sub") else "") for sc in story["scenes"]]
     page = ("PokePulse, a trading card collector page on Instagram. This Reel is about the ONE PIECE CARD GAME "
             "(Bandai) - never call it Pokemon" if story.get("topic") == "onepiece"
+            else "PokePulse, a Pokemon page on Instagram. This Reel is Pokemon VIDEO GAME news (not cards)"
+            if story.get("topic") == "games"
             else "PokePulse, a Pokemon card collector page on Instagram")
     prompt = (
         f"You are the voice of {page}. "
@@ -190,7 +192,7 @@ def gemini_models(key):
 
 def build_script(story):
     # Formats with exact prices: use the written lines, never an AI rewrite
-    if story.get("topic") in ("mover", "guess", "binder", "chase") and all(sc.get("say") for sc in story["scenes"]):
+    if story.get("topic") in ("mover", "guess", "binder", "chase", "funfact") and all(sc.get("say") for sc in story["scenes"]):
         return [{"say": sc["say"], "screen": _shorten(sc["text"], 7).rstrip(".").upper()}
                 for sc in story["scenes"]]
     script = ai_script(story)
@@ -372,12 +374,13 @@ def chunk_words(words, max_words=3, max_chars=14):
     return chunks
 
 
-CUT_EVERY = 1.3   # seconds between picture changes inside a slide
+CUT_EVERY = 1.2   # seconds between picture changes inside a slide
 
 def make_bg_video(scene, idx, dur, zoom_in, extra_imgs, out):
     """Background for one slide: switches picture every ~1.3s with a slow zoom on each."""
     imgs = [scene["img_url"]] + [u for u in (extra_imgs or []) if u != scene["img_url"]]
-    n = max(1, min(len(imgs), int(dur // CUT_EVERY)))
+    # at least 2 pictures on any slide that's long enough, so no slide is one still photo
+    n = max(1, min(len(imgs), max(2 if dur >= 1.8 else 1, int(dur // CUT_EVERY))))
     parts, seg = [], dur / n
     for k in range(n):
         png = f"v2_bg_{idx}_{k}.png"
@@ -438,6 +441,8 @@ def render_scene_clip(scene, idx, words, dur, zoom_in, out, screen_text=None, ex
 BROLL_QUERIES = {
     "news":  ["trading cards", "card collection", "collector cards", "opening card pack"],
     "onepiece": ["trading cards", "opening card pack", "card collection", "collector cards"],
+    "games": ["video game controller", "handheld game console", "gaming"],
+    "funfact": ["trading cards", "card collection"],
     "drops": ["opening booster pack", "unboxing cards", "card shop", "trading card box"],
     "sales": ["graded card", "collector cards", "auction", "money counting"],
     "bulk":  ["sorting cards", "card collection", "binder cards", "trading cards"],
@@ -611,7 +616,8 @@ def make_cover(story, path="cover.jpg"):
         y += int(size * 0.95)
     # red banner
     tag = {"news": "BREAKING", "drops": "NEW DROP", "sales": "BIG SALE", "bulk": "CHECK YOUR BULK",
-           "chase": "TOP CHASE CARDS", "onepiece": "ONE PIECE TCG"}.get(story.get("topic"), "POKEPULSE")
+           "chase": "TOP CHASE CARDS", "onepiece": "ONE PIECE TCG",
+           "games": "POKEMON GAMES", "funfact": "FUN FACT"}.get(story.get("topic"), "POKEPULSE")
     tf = get_font(80)
     tw = text_w(d, tag, tf) + 80
     x = (W - tw) // 2
