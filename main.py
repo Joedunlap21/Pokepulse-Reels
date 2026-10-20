@@ -2027,6 +2027,13 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Couldn't upload test preview: {e}")
         print(f"TEST SHEET: {sheet_url}\nTEST VIDEO: {vid_url}\nTEST COVER: {cover_url}")
+        try:                                # readable from the run page / API without opening logs
+            from visuals import count_visuals
+            nv = count_visuals(story)
+        except Exception:
+            nv = "?"
+        print(f"::notice title=Test reel [{story.get('topic')}]::{story['story_id']} | visuals: {nv} | "
+              f"sheet: {sheet_url} | video: {vid_url}")
         summary = os.getenv("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a") as f:
