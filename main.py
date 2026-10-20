@@ -136,7 +136,9 @@ SOURCES = [
     {"name": "Dexerto", "rss": "https://www.dexerto.com/feed/category/pokemon/", "base": "https://www.dexerto.com",
      "start": "<article", "end": ["</article>"], "max_imgs": 2},  # rest are related-article thumbnails
 ]
-PER_SOURCE = 6
+# Oct 19: only the newest 6 links per outlet were read, so by 5:30pm every story was already posted and
+# 5 of 6 Reel slots skipped. Read deeper (the 10-day age cutoff still applies).
+PER_SOURCE = 15
 
 # One Piece Card Game news (same research + posting rules as Pokemon news: facts only from the source).
 ONEPIECE_SOURCES = [
