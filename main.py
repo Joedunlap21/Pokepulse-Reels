@@ -410,9 +410,33 @@ def gather_articles(sources=None, franchise="pokemon"):
     arts.sort(key=lambda a: a["published"] or far_past, reverse=True)
     return arts
 
+# Words that say which franchise/outlet a story is from, not what it's about.
+_DUP_FILLER = {"one", "piece", "card", "game", "games", "pokemon", "pokémon", "tcg", "the", "a", "an",
+               "of", "and", "for", "to", "in", "on", "from", "with", "is", "are", "new", "news", "official",
+               "web", "site", "this", "your", "how", "what", "at", "by", "it", "its"}
+
+def _title_words(text):
+    return {w for w in re.findall(r"[a-z0-9']+", (text or "").lower()) if w not in _DUP_FILLER and len(w) > 1}
+
+def near_duplicate(title, captions):
+    """Oct 20: 'A Message from the ONE PIECE CARD GAME Development Team' went out 2 days after
+    'ONE PIECE CARD GAME Development Team Letter' because only exact titles were checked. Treat a story
+    as already posted when most of its topic words match the first line of a recent caption."""
+    tw = _title_words(title)
+    if len(tw) < 2:
+        return False
+    for c in captions:
+        first = (c or "").split("\n", 1)[0]
+        first = re.sub(r"^[^a-z0-9]*(one piece tcg|pok[eé]mon games|pok[eé]mon tcg news)?\s*:?", "", first)
+        cw = _title_words(first[:160])
+        shared = tw & cw
+        if len(shared) >= 2 and len(shared) / min(len(tw), max(len(cw), 1)) >= 0.66:
+            return True
+    return False
+
 def already_posted(title, posted, captions):
     t = (title or "").lower()
-    return t in posted or (bool(t) and any(t in c for c in captions))
+    return t in posted or (bool(t) and any(t in c for c in captions)) or near_duplicate(t, captions)
 
 def recent_ig_captions():
     token = os.getenv("IG_ACCESS_TOKEN", "").strip()
