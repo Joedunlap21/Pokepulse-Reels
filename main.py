@@ -192,6 +192,9 @@ NOT_COLLECTOR = ["deck list", "decklist", "deck profile", "deck guide", "regiona
                  "fundamental analysis", "stock price", "share price", "shareholders", "earnings report",
                  "fiscal year", "operating profit", "net sales"]
 
+# Digital-only Pokémon card games: never a physical "drop" / "what's inside" product.
+DIGITAL_ONLY = ["tcg pocket", "pokemon pocket", "pokémon pocket", "tcg live"]
+
 JUNK = ["open media", "tap to unmute", "follow along with the video", "this feature may not be available",
         "launched pokebeach", "is a fansite", "follow us", "thank you very much", "patreon", "subscribe",
         "click here", "sign up", "newsletter", "cookie", "yesterday at", "{\"@", "please make sure",
@@ -1482,6 +1485,12 @@ def build_story():
                 print(f"Skipping (not collector news): {art['title']}")
                 continue
             blob = " ".join([art["title"], art["desc"]] + art["paras"][:6] + art["items"])
+            if topic in ("drops", "inside") and any(w in head for w in DIGITAL_ONLY):
+                # Oct 21 6:30am: "TCG Pocket: Dual Fusion Expansion Coming Soon" posted as a DROP REPORT
+                # (a phone-game expansion, not a product you can buy) right after the Oct 20 10pm Dual Fusion
+                # Reel. Drop/inside slots are physical products only; digital stories fall through to news.
+                print(f"Skipping (digital, not a physical drop): {art['title']}")
+                continue
             if topic == "drops":
                 if word_hits(blob, DROP_WORDS) < 2:
                     continue
