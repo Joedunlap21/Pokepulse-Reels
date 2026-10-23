@@ -504,10 +504,10 @@ def build_article_story(art, kind):
         return None
     imgs = art["images"]
     hook = op_hook_title(art["title"]) if kind == "onepiece" else art["title"]
-    scenes = [{"tag": first_tag, "img_url": imgs[0], "text": hook.upper(),
+    scenes = [{"tag": first_tag, "img_url": imgs[0], "text": hook.upper(), "raw": hook,
                "colors": [YELLOW, WHITE], "sub": "POKEPULSE EXCLUSIVE"}]
     for i, s in enumerate(details):
-        scenes.append({"tag": tags[i], "img_url": imgs[(i + 1) % len(imgs)], "text": s.upper(),
+        scenes.append({"tag": tags[i], "img_url": imgs[(i + 1) % len(imgs)], "text": s.upper(), "raw": s,
                        "colors": [WHITE, YELLOW] if i % 2 == 0 else [YELLOW, WHITE]})
     return {"story_id": art["title"][:40], "key": art["title"].lower(), "scenes": scenes,
             "caption_full": article_caption(art, sents, onepiece=(kind == "onepiece"))}

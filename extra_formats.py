@@ -60,10 +60,10 @@ def build_games_story(art):
         return None
     imgs = art["images"]
     tags = ["THE DETAILS", "WHAT TO KNOW", "KEY INFO"]
-    scenes = [{"tag": "POKEMON GAMES NEWS", "img_url": imgs[0], "text": art["title"].upper(),
+    scenes = [{"tag": "POKEMON GAMES NEWS", "img_url": imgs[0], "text": art["title"].upper(), "raw": art["title"],
                "colors": [YELLOW, WHITE], "sub": "POKEPULSE EXCLUSIVE"}]
     for i, s in enumerate(details):
-        scenes.append({"tag": tags[i], "img_url": imgs[(i + 1) % len(imgs)], "text": s.upper(),
+        scenes.append({"tag": tags[i], "img_url": imgs[(i + 1) % len(imgs)], "text": s.upper(), "raw": s,
                        "colors": [WHITE, YELLOW] if i % 2 == 0 else [YELLOW, WHITE]})
     text = ""
     for s in sents:

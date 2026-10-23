@@ -26,12 +26,13 @@ def _match(query, title):
     return len(q & _w(title)) / len(q) if q else 0
 
 
-def tcgplayer(query, size=12):
-    key = ("tcg", query)
+def tcgplayer(query, size=12, line="pokemon"):
+    """TCGplayer product search. line: "pokemon" or "one-piece-card-game"."""
+    key = ("tcg", query, line)
     if key in _cache:
         return _cache[key]
     body = {"algorithm": "", "from": 0, "size": size,
-            "filters": {"term": {"productLineName": ["pokemon"]}, "range": {}, "match": {}},
+            "filters": {"term": {"productLineName": [line]}, "range": {}, "match": {}},
             "listingSearch": {"context": {"cart": {}}, "filters": {"term": {"sellerStatus": "Live", "channelId": 0},
                                                                 "range": {"quantity": {"gte": 1}},
                                                                 "exclude": {"channelExclusion": 0}}},
@@ -46,6 +47,30 @@ def tcgplayer(query, size=12):
         print(f"  TCGplayer search '{query}' failed: {e}")
     _cache[key] = out
     return out
+
+
+def best_product(query, line="pokemon", want="any", min_match=0.6):
+    """Photo URL of the TCGplayer product that best matches `query`, or None.
+    want: "sealed" (boxes, packs, tins), "card" (single cards) or "any"."""
+    best, best_score = None, 0
+    for r in tcgplayer(query, 24, line):
+        name = r.get("productName", "")
+        low = name.lower()
+        if "code card" in low or "case" in low.split() or not r.get("productId"):
+            continue
+        score = _match(query, name + " " + r.get("setName", ""))
+        if score < min_match:
+            continue
+        sealed = bool(r.get("sealed")) or "sealed" in str(r.get("productTypeName", "")).lower()
+        if want == "sealed" and sealed or want == "card" and not sealed:
+            score += 0.3
+        score += min(float(r.get("marketPrice") or 0), 500) / 5000      # popular / valuable first on ties
+        if score > best_score:
+            best, best_score = r, score
+    if best:
+        print(f"  picture '{query}': TCGplayer #{best['productId']} {best.get('productName')}")
+        return tcg_img(best["productId"])
+    return None
 
 
 def tcg_img(pid):

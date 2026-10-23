@@ -28,11 +28,14 @@ from main import W, H, BG, YELLOW, WHITE, GREEN, RED, get_font, text_w, load_ima
 VOICES = ["en-US-AndrewMultilingualNeural", "en-US-BrianMultilingualNeural",
           "en-US-AvaMultilingualNeural", "en-US-EmmaMultilingualNeural",
           "en-US-ChristopherNeural", "en-US-SteffanNeural", "en-GB-RyanNeural", "en-AU-WilliamNeural"]
-FEMALE_VOICES = ["en-US-AvaMultilingualNeural", "en-US-EmmaMultilingualNeural"]
-# Female voiceover only. A male voice set in the REEL_VOICE repo variable is ignored.
-VOICE = os.getenv("REEL_VOICE", "").strip() or "en-US-AvaMultilingualNeural"
+# Female voiceover only, a DIFFERENT voice picked at random for every Reel (Joe, Oct 23:
+# "switch the voice to random so it's not the same girl every time"). All free edge-tts voices.
+FEMALE_VOICES = ["en-US-AvaMultilingualNeural", "en-US-EmmaMultilingualNeural", "en-US-JennyNeural",
+                 "en-US-AriaNeural", "en-US-MichelleNeural", "en-GB-SoniaNeural", "en-GB-LibbyNeural",
+                 "en-AU-NatashaNeural", "en-CA-ClaraNeural", "en-IE-EmilyNeural"]
+VOICE = os.getenv("REEL_VOICE", "").strip() or "random"
 if VOICE == "random":
-    VOICE = random.choice(FEMALE_VOICES)
+    VOICE = random.SystemRandom().choice(FEMALE_VOICES)
 if VOICE not in FEMALE_VOICES and os.getenv("ALLOW_MALE_VOICE", "").strip().lower() not in ("1", "true", "yes"):
     print(f"Voice {VOICE} is not a female voice - using en-US-AvaMultilingualNeural")
     VOICE = "en-US-AvaMultilingualNeural"
@@ -119,11 +122,16 @@ def ai_script(story):
         "For each slide give:\n"
         '  "say": what the voice says, 6-14 words, sounds natural out loud\n'
         '  "screen": the big on-screen text, 2-6 words, ALL CAPS, the key fact\n'
-        "Slide 1 is the hook - make a collector stop scrolling (a surprise, a number, a question). "
+        "Slide 1 is the hook - make a collector stop scrolling in the first second: lead with the most "
+        "surprising number, name or twist from the source, or a bold question (under 10 words). "
+        "Every middle slide must reveal ONE new fact so viewers keep watching (no repeating, no filler). "
+        "Name the exact product, card, Pokemon or person on the slide that talks about it, so it matches "
+        "the picture on screen. "
         "Start straight with the news itself. Never open with filler like 'Okay', 'So', 'Guys', 'Yo', "
         "'This one's wild', 'You won't believe', 'Listen up'.\n"
-        "The last slide should land the point (why it matters), then ask viewers to comment and send it to "
-        "a friend, e.g. 'Hype or nah? Comment below and send this to a friend!'\n"
+        "The last slide should land the point (why it matters), then ask a quick two-choice question viewers "
+        "can answer in one word or emoji, and tell them to send it to a friend, e.g. 'Would you buy it or "
+        "skip it? Comment below and send this to a friend!'\n"
         "Also write \"thumb\": the Reel cover text, 2-5 words, ALL CAPS, clickbait that makes people tap "
         "(curiosity, a number, a price, urgency) but 100% true to the source - no fake claims.\n"
         'Reply with JSON only: {"thumb": "...", "slides": [{"say": "...", "screen": "..."}]}\n\n'
@@ -249,6 +257,9 @@ def speak(text, out_mp3):
                 return words
         except Exception as e:
             print(f"Voice attempt {attempt+1} failed: {e}")
+        if attempt == 1 and VOICE != "en-US-AvaMultilingualNeural":
+            globals()["VOICE"] = "en-US-AvaMultilingualNeural"   # this random voice is down -> Ava for the rest
+            print("Switching to backup voice Ava for this Reel")
     raise RuntimeError("edge-tts voice unavailable")
 
 

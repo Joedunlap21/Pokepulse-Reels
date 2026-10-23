@@ -24,7 +24,8 @@ def _ok(url, cache={}):
         return cache[url]
     from main import load_image
     im = load_image(url)
-    good = im is not None and min(im.size) >= 250
+    # Oct 23 (Joe: "bad images"): no tiny pictures, no thin banners / logo strips
+    good = im is not None and min(im.size) >= 400 and 0.4 <= im.size[0] / im.size[1] <= 2.6
     cache[url] = good
     return good
 
@@ -50,7 +51,8 @@ def _top_up(story, have):
     """More on-topic pictures. Pokemon stories: card art for Pokemon named in the story.
     Everything: Wikipedia photo of the things the slides name (no Pokemon art on One Piece)."""
     topic = story.get("topic")
-    text = " ".join([story.get("context", "")] + [sc.get("text", "") for sc in story.get("scenes", [])]).lower()
+    # only Pokemon the SLIDES actually talk about (not every name buried in the article)
+    text = " ".join(sc.get("text", "") for sc in story.get("scenes", [])).lower()
     text = text.replace("pokémon", "pokemon")
     found = []
     if topic not in ("onepiece",):

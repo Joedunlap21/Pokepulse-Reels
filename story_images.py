@@ -1,9 +1,17 @@
 """
-Pictures of the exact things a news story talks about - per slide.
-  "Kanye West shops at LA Sports Cards in Burbank"  -> Kanye West photo, Burbank photo (Wikipedia)
-  "Saint pulled a Kyogre from Storm Emerald"        -> Kyogre card art (pokemontcg.io)
-Free sources only: Wikipedia/Wikimedia (no key) + pokemontcg.io + the article's own photos.
-Every picture is looked up BY NAME for something the slide actually mentions - nothing random.
+Pictures of the exact things each slide talks about (Joe, Oct 23: "show the things we are talking about
+as pictures... they aren't related or are bad images, make them more correlated with the post").
+
+For every slide we work out WHAT it mentions (Gemini, or a no-AI fallback) and fetch a picture of that
+exact thing from the source that has the right kind of photo:
+  product / set (booster box, ETB, tin, One Piece OP-14...) -> TCGplayer product photo (Pokemon or One Piece)
+  card                                                     -> the real card (pokemontcg.io / TCGplayer One Piece)
+  Pokemon species                                          -> official Pokemon artwork (PokeAPI) + its card art
+  One Piece character                                      -> that character's One Piece card (TCGplayer)
+  video game / person / company / event / venue            -> Wikipedia main photo (title must really match)
+  anything else still missing                              -> Brave image search (only if BRAVE_API_KEY is set)
+Generic stuff is skipped on purpose: no city skylines for "London", no random hot cards.
+The article's own photos fill in after that, and slide 1 always opens on the article's main photo.
 """
 import os
 import re
@@ -14,6 +22,13 @@ import requests
 UA = {"User-Agent": "PokePulseBot/1.0 (https://github.com/Joedunlap21/Pokepulse-Reels)"}
 WIKI = "https://en.wikipedia.org/w/api.php"
 _cache = {}
+VENUE_WORDS = ("center", "centre", "store", "shop", "stadium", "convention", "hall", "arena", "museum", "cafe",
+               "café", "park", "mall", "expo", "con")
+PRODUCT_RE = re.compile(
+    r"((?:[A-Z][\w'’.:&-]*\s+){1,5}?(?:Elite Trainer Box|Booster Bundle|Booster Box|Booster Pack|Premium Collection|"
+    r"Ultra[- ]Premium Collection|Collection Box|Collection|Tin|Blister|Build & Battle(?: Box| Stadium)?|"
+    r"Starter Deck|Double Pack|Premium Booster|Extra Booster|Gift Box|Binder Collection|Poster Collection))")
+OP_CODE_RE = re.compile(r"\b(OP|EB|ST|PRB)[- ]?(\d{1,2})\b")
 
 
 def _words(s):
@@ -39,7 +54,7 @@ def wiki_image(term):
             for page in p.get("query", {}).get("pages", {}).values():
                 img = (page.get("thumbnail") or page.get("original") or {})
                 src = img.get("source", "")
-                if src and img.get("width", 0) >= 300 and not src.lower().endswith(".svg"):
+                if src and img.get("width", 0) >= 400 and not src.lower().endswith(".svg"):
                     url = src
                     break
             if url:
@@ -59,20 +74,83 @@ def pokemon_image(name, n=2):
         return []
 
 
+def official_art(name):
+    """Official Pokemon artwork from PokeAPI, e.g. 'Mega Lucario' -> Lucario's artwork."""
+    base = re.sub(r"^(mega|shiny|galarian|alolan|hisuian|paldean|dark|radiant)\s+", "", name.lower().strip())
+    base = re.sub(r"\s+(ex|gx|v|vmax|vstar|x|y)$", "", base).replace(" ", "-").replace(".", "").replace("'", "")
+    key = ("art", base)
+    if key in _cache:
+        return _cache[key]
+    url = None
+    try:
+        r = requests.get(f"https://pokeapi.co/api/v2/pokemon/{base}", timeout=15)
+        if r.status_code == 200:
+            o = (r.json().get("sprites") or {}).get("other") or {}
+            url = (o.get("official-artwork") or {}).get("front_default") or (o.get("home") or {}).get("front_default")
+    except Exception as e:
+        print(f"  official art '{name}' failed: {e}")
+    _cache[key] = url
+    return url
+
+
+def brave(query):
+    try:
+        from image_finder import brave_image
+        return brave_image(query)
+    except Exception:
+        return None
+
+
+def picture_for(name, typ, topic):
+    """Up to 2 picture URLs of exactly this thing, or []."""
+    from image_finder import best_product
+    op = topic == "onepiece"
+    line = "one-piece-card-game" if op else "pokemon"
+    name = name.strip()
+    got = []
+    if typ == "pokemon" and not op:
+        got = [official_art(name)] + pokemon_image(name.split(" ex")[0], 1)
+    elif typ in ("card", "character"):
+        if op:
+            got = [best_product(name, line, want="card", min_match=0.75)]
+        else:
+            got = pokemon_image(name, 1) or [official_art(name)]
+    elif typ in ("product", "set"):
+        got = [best_product(name, line, want="sealed")]
+        if not got[0] and typ == "set":
+            got = [best_product(f"{name} booster box", line, want="sealed", min_match=0.5)]
+        if not got[0]:
+            got = [brave(f"{name} {'One Piece Card Game' if op else 'Pokemon TCG'}")]
+    elif typ in ("game", "person", "company", "event", "venue", "place"):
+        if typ == "place" and not any(w in name.lower() for w in VENUE_WORDS):
+            return []                         # "London" -> no skyline photos; only real venues/stores
+        got = [wiki_image(name)]
+        if not got[0] and typ in ("game", "event", "venue"):
+            got = [brave(name)]
+    return [u for u in dict.fromkeys(got) if u]
+
+
 def ai_entities(story):
-    """Ask Gemini which concrete things each slide mentions (people, places, stores, Pokemon, products)."""
+    """Ask Gemini which concrete, picturable things each slide mentions."""
     key = os.getenv("GEMINI_API_KEY", "").strip()
     if not key:
         return None
     from reel_v2 import gemini_models
     slides = [sc["text"] for sc in story["scenes"]]
+    op = story.get("topic") == "onepiece"
+    kind = "One Piece Card Game (Bandai)" if op else "Pokemon"
+    types = ("person|venue|company|event|game|product|set|card|character" if op else
+             "person|venue|company|event|game|product|set|card|pokemon")
     prompt = (
-        "For each slide of a Pokemon card news Reel, list the concrete things it mentions that a viewer would "
-        "want to SEE a picture of: real people (full name), places (city, venue), stores/companies, events, "
-        "Pokemon (species name only, e.g. Kyogre), card names. Max 3 per slide, most important first. "
-        "Only names that appear in or are clearly referred to by that slide (use the article for full names, "
-        "e.g. 'Kanye' -> 'Kanye West'). No generic words like 'cards' or 'store'.\n"
-        'Reply JSON only: {"slides": [[{"name": "...", "type": "person|place|company|event|pokemon|card|product"}], ...]}\n\n'
+        f"For each slide of a {kind} news Reel, list the concrete things it mentions that a viewer would want "
+        "to SEE a picture of, most important first, max 3 per slide. Use full official names from the article: "
+        "products with their full name (e.g. 'Mega Evolution Elite Trainer Box', 'OP-14 Booster Box'), "
+        "sets by set name, cards by card name, "
+        + ("One Piece characters by card name (e.g. 'Monkey.D.Luffy'), " if op else "Pokemon by species name (e.g. 'Lucario'), ")
+        + "video games by title, real people by full name, venues/stores by full name. "
+        "Skip generic things (cards, fans, collectors, store, city or country names). "
+        "If a slide names nothing picturable, give the main product or subject of the whole article.\n"
+        f'Reply JSON only: {{"slides": [[{{"name": "...", "type": "{types}"}}], ...]}}\n\n'
         f"ARTICLE:\n{story.get('context', '')[:2500]}\n\nSLIDES:\n"
         + "\n".join(f"{i + 1}. {s}" for i, s in enumerate(slides))
     )
@@ -100,44 +178,61 @@ def ai_entities(story):
 
 
 def fallback_entities(story):
-    from main import pokemon_names
-    names = [n for n in pokemon_names() if len(n) > 3]
+    """No-AI version: products, set names, One Piece set codes, Pokemon names, people's names."""
+    op = story.get("topic") == "onepiece"
+    names = []
+    if not op:
+        try:
+            from main import pokemon_names
+            names = [n for n in pokemon_names() if len(n) > 3]
+        except Exception:
+            names = []
+    try:
+        from main import all_sets
+        set_names = [] if op else [s["name"] for s in all_sets() if len(s.get("name", "")) > 5]
+    except Exception:
+        set_names = []
+    title = story.get("context", "").split(". ")[0]
     out = []
     for sc in story["scenes"]:
-        t = sc["text"]
-        ents = [{"name": n.title(), "type": "pokemon"} for n in names
-                if re.search(r"\b" + re.escape(n) + r"\b", t.lower())][:2]
-        for m in re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b", sc.get("raw", t.title())):
-            if len(ents) < 3:
+        raw = sc.get("raw") or sc["text"]
+        t = raw if raw != raw.upper() else raw.title()
+        ents = [{"name": re.sub(r"^(?:New|The|A|An|This|Upcoming|Latest)\s+", "", m.strip()), "type": "product"}
+                for m in PRODUCT_RE.findall(t)][:2]
+        ents += [{"name": f"{a.upper()}-{int(b):02d}", "type": "set"} for a, b in OP_CODE_RE.findall(t)][:1]
+        ents += [{"name": sn, "type": "set"} for sn in set_names if sn.lower() in t.lower()][:1]
+        ents += [{"name": n.title(), "type": "pokemon"} for n in names
+                 if re.search(r"\b" + re.escape(n) + r"\b", t.lower())][:2]
+        taken = " ".join(e["name"].lower() for e in ents)
+        for m in re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b", t):
+            if len(ents) < 3 and m.lower() not in ("pokemon center", "one piece") \
+                    and not any(w in taken for w in m.lower().split()):
                 ents.append({"name": m, "type": "person"})
-        out.append(ents)
+        if not ents:                         # nothing on this slide -> the story's main product, if any
+            ents = [{"name": m.strip(), "type": "product"} for m in PRODUCT_RE.findall(title)][:1]
+        out.append(ents[:3])
     return out
 
 
 def enrich(story):
     """Give every slide its own list of on-topic pictures: sc['imgs'] (first = main picture)."""
     article = list(story.get("article_images") or [])
+    topic = story.get("topic")
     ents = ai_entities(story) or fallback_entities(story)
     seen = set()
     for i, (sc, el) in enumerate(zip(story["scenes"], ents)):
-        imgs = []
+        imgs = [article[0]] if i == 0 and article else []     # slide 1 opens on the story's own main photo
         for e in (el or [])[:3]:
             name, typ = str(e.get("name", "")).strip(), str(e.get("type", "")).lower()
             if not name:
                 continue
-            if typ in ("pokemon", "card") and story.get("topic") == "onepiece":
+            if typ in ("pokemon",) and topic == "onepiece":
                 continue                      # never Pokemon art on a One Piece Reel
-            if typ in ("pokemon", "card"):
-                got = pokemon_image(name.split(" ex")[0] if typ == "pokemon" else name, 2)
-            else:
-                u = wiki_image(name)
-                got = [u] if u else []
-            for u in got:
-                if u and u not in imgs:
+            for u in picture_for(name, typ, topic):
+                if u not in imgs and u not in seen:
                     imgs.append(u)
                     print(f"  slide {i + 1}: {name} ({typ}) -> picture")
-        # the article's own photos fill in, so a slide is never empty
-        for u in article:
+        for u in article:                     # the article's own photos fill in, so a slide is never empty
             if len(imgs) >= 3:
                 break
             if u not in imgs:
