@@ -398,6 +398,8 @@ def gather_articles(sources=None, franchise="pokemon"):
             low = " " + blob.lower() + " "
             if any(c in low for c in CELEB):
                 continue  # no celebrity / influencer stories
+            if not is_english(blob):
+                continue  # English-language stories only (Oct 22)
             if franchise == "onepiece":
                 if "one piece" not in low or word_hits(blob, OP_WORDS) == 0:
                     continue  # must be about the One Piece CARD game
@@ -435,7 +437,30 @@ def near_duplicate(title, captions):
         shared = tw & cw
         if len(shared) >= 2 and len(shared) / min(len(tw), max(len(cw), 1)) >= 0.66:
             return True
+        # Oct 22: '"Dual Fusion" Set Revealed for "Pocket"…' went out after 'Pokemon TCG Pocket Dual Fusion
+        # cards: Full set so far' (4 of 7 words). Also a repeat: half the title's words + a shared name phrase.
+        key = {w for w in shared if not w.isdigit() and w not in _MONTHS and len(w) > 2}
+        if len(key) >= 4 and len(key) / len(tw) >= 0.5:
+            tl = re.findall(r"[a-z0-9']+", (title or "").lower())
+            cl = " ".join(re.findall(r"[a-z0-9']+", first[:160]))
+            if any(a in key and b in key and f"{a} {b}" in cl for a, b in zip(tl, tl[1:])):
+                return True
     return False
+
+_MONTHS = {"january", "february", "march", "april", "may", "june", "july", "august", "september",
+           "october", "november", "december"}
+
+# Oct 22: an Italian article ("quali prodotti comprare per iniziare") was posted as One Piece news.
+_EN_WORDS = {"the", "and", "is", "are", "with", "for", "this", "that", "will", "you", "of", "to", "be", "from"}
+_FOREIGN_WORDS = {"il", "di", "che", "per", "una", "della", "sono", "gli", "anche", "con", "le", "les",
+                  "des", "est", "pour", "dans", "une", "el", "los", "las", "para", "por", "del", "como",
+                  "que", "der", "die", "und", "das", "ist", "mit", "não", "uma", "quali", "nel"}
+
+def is_english(text):
+    words = re.findall(r"[a-zà-ÿ']+", (text or "").lower())
+    en = sum(w in _EN_WORDS for w in words)
+    fo = sum(w in _FOREIGN_WORDS for w in words)
+    return en >= fo
 
 def already_posted(title, posted, captions):
     t = (title or "").lower()
