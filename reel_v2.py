@@ -385,7 +385,7 @@ def chunk_words(words, max_words=3, max_chars=14):
     return chunks
 
 
-CUT_EVERY = 1.2   # seconds between picture changes inside a slide
+CUT_EVERY = 1.0   # seconds between picture changes inside a slide (Oct 23: more pictures)
 
 def make_bg_video(scene, idx, dur, zoom_in, extra_imgs, out):
     """Background for one slide: switches picture every ~1.3s with a slow zoom on each."""

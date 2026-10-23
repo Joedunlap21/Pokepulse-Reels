@@ -102,25 +102,30 @@ def brave(query):
 
 
 def picture_for(name, typ, topic):
-    """Up to 2 picture URLs of exactly this thing, or []."""
+    """Pictures of exactly this thing (several versions for characters), or []."""
     from image_finder import best_product
     op = topic == "onepiece"
     line = "one-piece-card-game" if op else "pokemon"
     name = name.strip()
     got = []
+    from character_art import pokemon_gallery, onepiece_gallery, card_versions, set_chase_cards
     if typ == "pokemon" and not op:
-        got = [official_art(name)] + pokemon_image(name.split(" ex")[0], 1)
+        # artwork + shiny + 3D + other forms + non-holo / holo / shiny / full-art / illustration cards
+        got = pokemon_gallery(name.split(" ex")[0], 5) or [official_art(name)]
     elif typ in ("card", "character"):
         if op:
-            got = [best_product(name, line, want="card", min_match=0.75)]
+            # the character's cards in different versions: manga, parallel / alt art, special, regular
+            got = [best_product(name, line, want="card", min_match=0.75)] + onepiece_gallery(name, 4)
         else:
-            got = pokemon_image(name, 1) or [official_art(name)]
+            got = pokemon_image(name, 1) + card_versions(name, 3) or [official_art(name)]
     elif typ in ("product", "set"):
         got = [best_product(name, line, want="sealed")]
         if not got[0] and typ == "set":
             got = [best_product(f"{name} booster box", line, want="sealed", min_match=0.5)]
         if not got[0]:
             got = [brave(f"{name} {'One Piece Card Game' if op else 'Pokemon TCG'}")]
+        if typ == "set":
+            got += set_chase_cards(name, topic, 3)          # the set's biggest cards
     elif typ in ("game", "person", "company", "event", "venue", "place"):
         if typ == "place" and not any(w in name.lower() for w in VENUE_WORDS):
             return []                         # "London" -> no skyline photos; only real venues/stores
@@ -203,6 +208,9 @@ def fallback_entities(story):
         ents += [{"name": sn, "type": "set"} for sn in set_names if sn.lower() in t.lower()][:1]
         ents += [{"name": n.title(), "type": "pokemon"} for n in names
                  if re.search(r"\b" + re.escape(n) + r"\b", t.lower())][:2]
+        if op:
+            from character_art import find_op_characters
+            ents += [{"name": c, "type": "character"} for c in find_op_characters(t)][:2]
         taken = " ".join(e["name"].lower() for e in ents)
         for m in re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){1,2})\b", t):
             if len(ents) < 3 and m.lower() not in ("pokemon center", "one piece") \
@@ -229,6 +237,8 @@ def enrich(story):
             if typ in ("pokemon",) and topic == "onepiece":
                 continue                      # never Pokemon art on a One Piece Reel
             for u in picture_for(name, typ, topic):
+                if len(imgs) >= 7:
+                    break
                 if u not in imgs and u not in seen:
                     imgs.append(u)
                     print(f"  slide {i + 1}: {name} ({typ}) -> picture")

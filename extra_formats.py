@@ -163,10 +163,15 @@ def build_funfact_story(posted, captions=()):
                 imgs += _art(pp)[:1]
             except Exception:
                 pass
-        try:
-            imgs += card_images(f'name:"{disp}"', 4)
+        try:   # Oct 23 (Joe): other forms + holo vs non-holo vs shiny vs full-art cards
+            from character_art import card_versions, pokemon_forms
+            imgs += pokemon_forms(species["name"], 2) + card_versions(disp, 5)
         except Exception as e:
-            print(f"  fun fact: card art failed ({e})")
+            print(f"  fun fact: card versions failed ({e})")
+            try:
+                imgs += card_images(f'name:"{disp}"', 4)
+            except Exception as e2:
+                print(f"  fun fact: card art failed ({e2})")
         imgs = list(dict.fromkeys(u for u in imgs if u))
         if len(imgs) < 5:
             print(f"  fun fact: {disp} only has {len(imgs)} pictures, trying another")
@@ -196,7 +201,7 @@ def build_funfact_story(posted, captions=()):
              "say": flav[1]},
         ]
         for i, sc in enumerate(scenes):            # every slide starts with its own picture, then cuts
-            sc["imgs"] = [imgs[i % len(imgs)]] + [u for u in imgs if u != imgs[i % len(imgs)]][:3]
+            sc["imgs"] = [imgs[i % len(imgs)]] + [u for u in imgs if u != imgs[i % len(imgs)]][:4]
         tagname = re.sub(r"[^A-Za-z0-9]", "", disp)
         cap = (f"🧠 POKÉMON FUN FACT: {disp}\n\n"
                f"{disp} is the {genus}, a {t_join} type{' from ' + region if region else ''}. "

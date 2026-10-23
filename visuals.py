@@ -15,8 +15,8 @@ import re
 import random
 
 MIN_VISUALS = 3
-TARGET_VISUALS = 6
-PER_SLIDE = 4
+TARGET_VISUALS = 10   # Oct 23 (Joe): more pictures - characters, holo vs non-holo, shiny, forms
+PER_SLIDE = 5
 
 
 def _ok(url, cache={}):
@@ -57,15 +57,24 @@ def _top_up(story, have):
     found = []
     if topic not in ("onepiece",):
         try:
-            from main import pokemon_names, card_images
+            from main import pokemon_names
+            from character_art import pokemon_gallery
             names = [n for n in pokemon_names() if len(n) > 3 and re.search(r"\b" + re.escape(n) + r"\b", text)]
             for nm in names[:3]:
-                found += card_images(f'name:"{nm}"', 3)
-                print(f"  visuals: + {nm} card art")
+                found += pokemon_gallery(nm, 5)
+                print(f"  visuals: + {nm} artwork / shiny / forms / card versions")
                 if len(have) + len(found) >= TARGET_VISUALS + 2:
                     break
         except Exception as e:
             print(f"  visuals: card art failed ({e})")
+    if topic == "onepiece":
+        try:
+            from character_art import find_op_characters, onepiece_gallery
+            for ch in find_op_characters(text)[:3]:
+                found += onepiece_gallery(ch, 4)
+                print(f"  visuals: + {ch} card versions")
+        except Exception as e:
+            print(f"  visuals: One Piece character cards failed ({e})")
     if len(have) + len(found) < TARGET_VISUALS:
         try:
             from story_images import ai_entities, wiki_image
