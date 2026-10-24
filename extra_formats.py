@@ -45,9 +45,17 @@ GAMES_SKIP = ["fan game", "fan-made game", "fangame", "browser game", "megabonk"
               "net sales", "booster box", "elite trainer box", "psa 10", "graded card", "prerelease"]
 
 
+# Oct 23: housekeeping notices (a GO "Stamp Rallies Clarification", PokeCoin store notes) went out as
+# games Reels on 0-gain days. Skip them by title so the slot posts a real event/game story (or falls back).
+GAMES_NOTICE_SKIP = ["clarification", "clarify", "known issue", "maintenance", "bug fix", "error",
+                     "pokécoin", "pokecoin", "web store", "terms of service", "privacy"]
+
+
 def is_game_story(art):
     blob = " ".join([art["title"], art["desc"]] + art["paras"][:4]).lower()
     if any(w in blob for w in GAMES_SKIP):
+        return False
+    if any(w in art["title"].lower() for w in GAMES_NOTICE_SKIP):
         return False
     return sum(1 for w in GAME_WORDS if w in blob) >= 1 and ("pokemon" in blob or "pokémon" in blob)
 
