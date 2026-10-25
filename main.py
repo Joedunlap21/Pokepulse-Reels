@@ -1203,10 +1203,15 @@ def build_binder_story(captions):
 
 FORMAT_MARKERS = {"drops": ["🛒 drop report", "🚨 drop", "restock"], "inside": ["📦 what's inside"],
                   "mover": ["📈 card of the day"], "guess": ["🤔 guess the price"],
-                  "binder": ["📚 check your binder"], "chase": ["🔥 top chase cards"]}
+                  "binder": ["📚 check your binder"], "chase": ["🔥 top chase cards"],
+                  "games": ["🎮 pokémon games"]}   # games only counted (cap of 2/day), never blocked by this set
+
+_FORMAT_COUNTS = {}
 
 def formats_posted_today():
-    """Which Reel formats already went out today (Eastern time), from the account's own captions."""
+    """Which Reel formats already went out today (Eastern time), from the account's own captions.
+    Also fills _FORMAT_COUNTS (format -> Reels today) for the games cap in build_story."""
+    _FORMAT_COUNTS.clear()
     token, uid = os.getenv("IG_ACCESS_TOKEN"), os.getenv("IG_USER_ID")
     if not token or not uid:
         return set()
@@ -1228,6 +1233,7 @@ def formats_posted_today():
         for fmt, marks in FORMAT_MARKERS.items():
             if any(mk in cap for mk in marks):
                 done.add(fmt)
+                _FORMAT_COUNTS[fmt] = _FORMAT_COUNTS.get(fmt, 0) + 1
     print(f"Formats already posted today: {sorted(done) or 'none'}")
     return done
 
@@ -1421,6 +1427,13 @@ def build_story():
     # Card-world news only (no celebrity stories). Card formats never repeat in a day; news, One Piece
     # and sales can (each one is a different story). Nothing new? fall back to another topic.
     done = formats_posted_today() - set(NEWS_TOPICS)
+    # Oct 24: news + One Piece ran dry and 4 of 6 Reels were Pokemon GO/games (the weakest-gaining
+    # format). Games as a FALLBACK only when no games Reel went out yet today (keeps room for the
+    # 5:30pm games slot); max 2 games Reels a day in total.
+    g = _FORMAT_COUNTS.get("games", 0)
+    if g >= 2 or (first != "games" and g >= 1):
+        done.add("games")
+        print(f"Games Reels today: {g} - games skipped for this slot")
     if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes") and os.getenv("REEL_TOPIC", "").strip():
         done = set()   # test runs build the requested format even if it already posted today
     backups = ["news", "onepiece", "games", "drops", "sales", "inside", "funfact"]   # funfact last: never empty
