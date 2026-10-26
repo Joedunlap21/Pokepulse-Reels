@@ -252,6 +252,11 @@ def list_source(src):
             out.append(u)
     if src["name"] == "PokeGuardian":  # its homepage pins old posts; the id in the URL is the real order
         out.sort(key=lambda u: int(re.search(r"/(\d+)_", u).group(1)), reverse=True)
+        # Its pages carry no date, so old posts slipped past the 10-day cutoff (Oct 25 dry run picked the
+        # Mega Heatran gym promos from Oct 16). Ids rise ~1,300/day: keep only ids within ~3 days of the newest.
+        if out:
+            newest = int(re.search(r"/(\d+)_", out[0]).group(1))
+            out = [u for u in out if newest - int(re.search(r"/(\d+)_", u).group(1)) <= 4000]
     return [(u, None) for u in out[:PER_SOURCE]]
 
 def full_size(u):
