@@ -21,6 +21,15 @@ for label, sources in groups:
         except Exception as e:
             print(f"::notice title={label} {src['name']}::FAIL list: {str(e)[:150]}")
             continue
+        if not links and "list" in src:  # show what the page links to, so a changed URL pattern can be fixed
+            import re as _re
+            page = M.get_html(src["list"]) or ""
+            t = _re.search(r"<title>(.*?)</title>", page, _re.S)
+            hrefs = sorted(set(_re.findall(r'href="([^"]+)"', page)))
+            print(f"HREFS {src['name']}: page {len(page)} chars, title={t.group(1).strip()[:80] if t else None}")
+            for h in hrefs[:120]:
+                print("  ", h)
+            print(f"::notice title={label} {src['name']} hrefs::page {len(page)} chars; " + " ".join(hrefs[:60])[:3500])
         good, sample = 0, ""
         for url, d in links[:4]:
             try:
