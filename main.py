@@ -131,7 +131,8 @@ SOURCES = [
      "link_re": r'href="(https://www\.pokebeach\.com/20\d\d/\d\d/[a-z0-9\-]+)/?"',
      "start": "entry-content", "end": ["launched PokeBeach", 'class="author', "is a fansite"]},
     {"name": "PokeGuardian", "list": "https://www.pokeguardian.com/", "base": "https://www.pokeguardian.com",
-     "link_re": r'href="(https://www\.pokeguardian\.com/\d+_[a-z0-9\-]+)"',
+     # Oct 25: the site now writes relative links ("/3421701_..."), so 0 links were found since ~Oct 15
+     "link_re": r'href="((?:https://www\.pokeguardian\.com)?/\d+_[a-z0-9\-]+)"',
      "start": "<main", "end": ["</main>"]},
     {"name": "Dexerto", "rss": "https://www.dexerto.com/feed/category/pokemon/", "base": "https://www.dexerto.com",
      "start": "<article", "end": ["</article>"], "max_imgs": 2},  # rest are related-article thumbnails
