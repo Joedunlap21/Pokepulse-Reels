@@ -1395,6 +1395,8 @@ TOPICS = ["drops", "sales", "inside", "news", "onepiece", "games", "funfact", "c
 # Card formats (mover, guess, binder, chase) still work when run by hand from the Actions page.
 # Oct 20 (Joe): minimum 6 posts a day - news, drops, One Piece, games, character fun facts.
 #   6:30am drops · 11:30am news · 3:30pm onepiece · 5:30pm games · 8pm funfact · 10pm news
+# Oct 27 (week 3): the 5:30pm slot tries card news / One Piece first, games only as its fallback;
+#   fallback order is news -> onepiece -> drops -> sales -> inside -> games -> funfact.
 # Any slot with nothing new falls back down the list; "funfact" never runs dry, so no slot skips.
 NEWS_TOPICS = ("news", "onepiece", "sales", "games", "funfact")   # different story every time, so they can repeat in a day
 
@@ -1442,8 +1444,17 @@ def build_story():
         print(f"Games Reels today: {g} - games skipped for this slot")
     if os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes") and os.getenv("REEL_TOPIC", "").strip():
         done = set()   # test runs build the requested format even if it already posted today
-    backups = ["news", "onepiece", "games", "drops", "sales", "inside", "funfact"]   # funfact last: never empty
-    order = [t for t in [first] + backups if t not in done]
+    # Week 3 (Oct 27): physical-card content gained followers; Pokemon GO/games and fun-fact filler
+    # didn't (Oct 20-26). Timer slots now try card news before games (5:30pm slot: news -> games),
+    # and games is the last fallback before fun facts. Hand-picked topics (exact_topic / dry run) unchanged.
+    picked = os.getenv("REEL_TOPIC", "").strip().lower() == first and (
+        os.getenv("EXACT_TOPIC", "").strip().lower() in ("1", "true", "yes") or
+        os.getenv("DRY_RUN", "").strip().lower() in ("1", "true", "yes"))
+    lead = [first]
+    if first == "games" and not picked:
+        lead = ["news", "onepiece", "games"]
+    backups = ["news", "onepiece", "drops", "sales", "inside", "games", "funfact"]   # funfact last: never empty
+    order = [t for t in lead + backups if t not in done]
     order = list(dict.fromkeys(order)) or [first]
     articles = None
     op_articles = None
