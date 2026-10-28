@@ -1536,6 +1536,9 @@ def build_story():
             if already_posted(art["title"], posted, captions):
                 continue
             head = (art["title"] + " " + art["desc"] + " " + " ".join(art["paras"][:2])).lower()
+            # Oct 27: "Pokémon UNITE" (accented é) got past the "pokemon unite" filter and posted as a
+            # DROP REPORT + card news. Match filters against an accent-free copy.
+            head = head.replace("é", "e")
             if any(re.search(r"\b" + re.escape(w) + r"\b", head) for w in NOT_COLLECTOR):
                 print(f"Skipping (not collector news): {art['title']}")
                 continue
