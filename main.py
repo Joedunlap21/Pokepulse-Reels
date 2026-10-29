@@ -451,6 +451,29 @@ def near_duplicate(title, captions):
             cl = " ".join(re.findall(r"[a-z0-9']+", first[:160]))
             if any(a in key and b in key and f"{a} {b}" in cl for a, b in zip(tl, tl[1:])):
                 return True
+        if len(shared) >= 2 and same_event(title, first[:160]):
+            return True
+    return False
+
+# Oct 27-28: the same event came back under a new headline ('McDonald's ... toys and cards leak' ->
+# 'McDonald's Pokemon TCG Promotion Starts November 10th'; 'GO Halloween 2026 Part I and Part II' ->
+# 'GO has kicked off its 2-part Halloween 2026 event'). A shared promo brand or a shared 'Name YEAR'
+# event name (not a month: 'November 2026' stays allowed) marks it as the same story.
+_PROMO_BRANDS = ("mcdonald", "happy meal", "burger king", "wendy's", "subway", "general mills")
+
+def same_event(title, first_line):
+    t = (title or "").lower()
+    c = (first_line or "").lower()
+    if any(b in t and b in c for b in _PROMO_BRANDS):
+        return True
+    tl = re.findall(r"[a-z0-9']+", t)
+    cl = " " + " ".join(re.findall(r"[a-z0-9']+", c)) + " "
+    for a, b in zip(tl, tl[1:]):
+        name, year = (a, b) if re.fullmatch(r"20\d\d", b) else (b, a) if re.fullmatch(r"20\d\d", a) else (None, None)
+        if not name or name in _DUP_FILLER or name in _MONTHS or len(name) < 3 or name.isdigit():
+            continue
+        if f" {a} {b} " in cl:
+            return True
     return False
 
 _MONTHS = {"january", "february", "march", "april", "may", "june", "july", "august", "september",
