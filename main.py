@@ -193,6 +193,12 @@ NOT_COLLECTOR = ["deck list", "decklist", "deck profile", "deck guide", "regiona
                  "fundamental analysis", "stock price", "share price", "shareholders", "earnings report",
                  "fiscal year", "operating profit", "net sales"]
 
+# Pokémon video-game titles: a story whose TITLE names one is game news, not card news (Oct 29: three
+# Pokemon.com Legends: Z-A / Pokémon Champions game stories posted in card slots, 6:50am, 11:49am, 10:15pm).
+# Title-only so card articles that mention a game in passing are kept; games slot is unaffected.
+GAME_TITLES = ["legends: z-a", "legends: za", "legends z-a", "legends za", "pokemon champions",
+               "pokemon sleep", "pokemon masters", "pokemon home", "pokemon cafe", "pokemon smile"]
+
 # Digital-only Pokémon card games: never a physical "drop" / "what's inside" product.
 DIGITAL_ONLY = ["tcg pocket", "pokemon pocket", "pokémon pocket", "tcg live"]
 
@@ -1564,6 +1570,10 @@ def build_story():
             head = head.replace("é", "e")
             if any(re.search(r"\b" + re.escape(w) + r"\b", head) for w in NOT_COLLECTOR):
                 print(f"Skipping (not collector news): {art['title']}")
+                continue
+            title_l = art["title"].lower().replace("é", "e")
+            if any(g in title_l for g in GAME_TITLES):
+                print(f"Skipping (video game, not card news): {art['title']}")
                 continue
             blob = " ".join([art["title"], art["desc"]] + art["paras"][:6] + art["items"])
             if topic in ("drops", "inside") and any(w in head for w in DIGITAL_ONLY):
