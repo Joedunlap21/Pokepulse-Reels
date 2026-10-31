@@ -136,6 +136,10 @@ SOURCES = [
      "start": "<main", "end": ["</main>"]},
     {"name": "Dexerto", "rss": "https://www.dexerto.com/feed/category/pokemon/", "base": "https://www.dexerto.com",
      "start": "<article", "end": ["</article>"], "max_imgs": 2},  # rest are related-article thumbnails
+    # Oct 30: card news ran dry by ~3pm again (2 games + 2 fun facts after). Bing News search widens supply;
+    # every story still passes the same card-word, English, celebrity, game-title and duplicate filters.
+    {"name": "Bing News", "rss": "https://www.bing.com/news/search?q=%22Pokemon+TCG%22&format=rss",
+     "base": "", "start": "<article", "end": ["</article>"], "max_imgs": 5},
 ]
 # Oct 19: only the newest 6 links per outlet were read, so by 5:30pm every story was already posted and
 # 5 of 6 Reel slots skipped. Read deeper (the 10-day age cutoff still applies).
