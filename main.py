@@ -203,6 +203,13 @@ NOT_COLLECTOR = ["deck list", "decklist", "deck profile", "deck guide", "regiona
 GAME_TITLES = ["legends: z-a", "legends: za", "legends z-a", "legends za", "pokemon champions",
                "pokemon sleep", "pokemon masters", "pokemon home", "pokemon cafe", "pokemon smile"]
 
+# Retail shopping-deal pieces (Oct 31: Bing News fed two Amazon "way under market price" / "record-low
+# price" Reels at 3:28pm and 8:07pm). Store prices change within hours, so the Reel's price goes stale fast
+# (accurate-price rule), and they read as ads, not news. Title-only so preorder/drop stories are kept.
+DEAL_TITLES = ["record-low", "record low price", "lowest price", "under market price", "below market price",
+               "price drop", "price cut", "% off", "deal alert", "best deal", "on sale", "discounted",
+               "black friday", "cyber monday", "prime day", "amazon deal", "walmart deal"]
+
 # Digital-only Pokémon card games: never a physical "drop" / "what's inside" product.
 DIGITAL_ONLY = ["tcg pocket", "pokemon pocket", "pokémon pocket", "tcg live"]
 
@@ -1578,6 +1585,9 @@ def build_story():
             title_l = art["title"].lower().replace("é", "e")
             if any(g in title_l for g in GAME_TITLES):
                 print(f"Skipping (video game, not card news): {art['title']}")
+                continue
+            if any(d in title_l for d in DEAL_TITLES):
+                print(f"Skipping (shopping deal, price goes stale): {art['title']}")
                 continue
             blob = " ".join([art["title"], art["desc"]] + art["paras"][:6] + art["items"])
             if topic in ("drops", "inside") and any(w in head for w in DIGITAL_ONLY):
