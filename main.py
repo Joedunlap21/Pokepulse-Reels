@@ -206,7 +206,7 @@ GAME_TITLES = ["legends: z-a", "legends: za", "legends z-a", "legends za", "poke
 # Retail shopping-deal pieces (Oct 31: Bing News fed two Amazon "way under market price" / "record-low
 # price" Reels at 3:28pm and 8:07pm). Store prices change within hours, so the Reel's price goes stale fast
 # (accurate-price rule), and they read as ads, not news. Title-only so preorder/drop stories are kept.
-DEAL_TITLES = ["record-low", "record low price", "lowest price", "under market price", "below market price",
+DEAL_TITLES = ["record-low", "record low price", "lowest price", "under market", "below market",
                "price drop", "price cut", "% off", "deal alert", "best deal", "on sale", "discounted",
                "black friday", "cyber monday", "prime day", "amazon deal", "walmart deal"]
 
