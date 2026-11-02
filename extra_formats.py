@@ -133,7 +133,12 @@ def _feet(dm):
 
 def build_funfact_story(posted, captions=()):
     """posted: lower-case keys already used; captions: recent IG captions (lower-case)."""
-    names = [n for n in FAVORITES if f"funfact {n}" not in posted]
+    # Nov 1: only the first 15 favourites were ever tried; once all 15 were in recent captions every
+    # fun-fact run came back empty (3 Reels slots posted nothing). Drop favourites already captioned first.
+    def _captioned(n):
+        tag = f"fun fact: {n.replace('-', ' ')}"
+        return any(tag in c for c in captions)
+    names = [n for n in FAVORITES if f"funfact {n}" not in posted and not _captioned(n)]
     if not names:
         names = [str(i) for i in random.sample(range(1, 1026), 40)]
     head = names[:12]

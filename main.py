@@ -208,7 +208,10 @@ GAME_TITLES = ["legends: z-a", "legends: za", "legends z-a", "legends za", "poke
 # (accurate-price rule), and they read as ads, not news. Title-only so preorder/drop stories are kept.
 DEAL_TITLES = ["record-low", "record low price", "lowest price", "under market", "below market",
                "price drop", "price cut", "% off", "deal alert", "best deal", "on sale", "discounted",
-               "black friday", "cyber monday", "prime day", "amazon deal", "walmart deal"]
+               "black friday", "cyber monday", "prime day", "amazon deal", "walmart deal",
+               # Nov 1: "Today's Top Deals: MTG…" and "Walmart… closer to market price - save…" got through
+               "top deals", "today's deals", "todays deals", "closer to market price", "- save", "save $",
+               "save up to"]
 
 # Digital-only Pokémon card games: never a physical "drop" / "what's inside" product.
 DIGITAL_ONLY = ["tcg pocket", "pokemon pocket", "pokémon pocket", "tcg live"]
