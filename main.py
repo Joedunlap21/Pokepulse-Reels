@@ -213,6 +213,12 @@ DEAL_TITLES = ["record-low", "record low price", "lowest price", "under market",
                "top deals", "today's deals", "todays deals", "closer to market price", "- save", "save $",
                "save up to"]
 
+# Nov 3 6:45am: "Pokemon collector reveals $660,000 'dream card' was actually fake" posted as a DROP REPORT
+# (body mentioned stores/collections, so it passed the drop-word check). Fakes, thefts and auction sales are
+# news, not drops: drops/inside slots skip them by title and they fall through to news/sales.
+NOT_DROP_TITLES = ["fake", "counterfeit", "scam", "stolen", "steal", "theft", "thief", "thieves", "lawsuit",
+                   "arrest", "sold for", "sells for", "auction", "collector reveals"]
+
 # Digital-only Pokémon card games: never a physical "drop" / "what's inside" product.
 DIGITAL_ONLY = ["tcg pocket", "pokemon pocket", "pokémon pocket", "tcg live"]
 
@@ -1598,6 +1604,9 @@ def build_story():
                 # (a phone-game expansion, not a product you can buy) right after the Oct 20 10pm Dual Fusion
                 # Reel. Drop/inside slots are physical products only; digital stories fall through to news.
                 print(f"Skipping (digital, not a physical drop): {art['title']}")
+                continue
+            if topic in ("drops", "inside") and any(w in title_l for w in NOT_DROP_TITLES):
+                print(f"Skipping (news story, not a product drop): {art['title']}")
                 continue
             if topic == "drops":
                 if word_hits(blob, DROP_WORDS) < 2:
